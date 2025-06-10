@@ -1,0 +1,5 @@
+[workspace]
+resolver = "3"
+members = [
+    "tree_gen", "tree_gen_derive"       
+]
