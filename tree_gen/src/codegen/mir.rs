@@ -3,7 +3,7 @@ use regex_syntax::{
     ParserBuilder,
     hir::{Hir, HirKind},
 };
-use snafu::{ResultExt};
+use snafu::ResultExt;
 
 use crate::codegen::{
     CodegenError,
@@ -101,7 +101,7 @@ impl TryFrom<Hir> for Mir {
                 })
             }
             HirKind::Capture(capture) => Mir::try_from(*capture.sub),
-            HirKind::Look(look) => LookSnafu{look}.fail(),
+            HirKind::Look(look) => LookSnafu { look }.fail(),
         }
     }
 }

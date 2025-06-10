@@ -1,6 +1,5 @@
 mod parser;
 
-
 use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
 
@@ -36,7 +35,7 @@ fn my_derive(item: proc_macro2::TokenStream) -> Result<proc_macro2::TokenStream,
                 }
                 VariantParser::Node => {
                     node_variant.push("");
-                },
+                }
                 VariantParser::None => (),
             }
         }
