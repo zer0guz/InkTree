@@ -1,8 +1,7 @@
-use chumsky::prelude::todo;
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use crate::{BuilderExtra, BuilderParser, codegen::mir::Mir};
+use crate::codegen::mir::Mir;
 
 struct ParserGenerator;
 
@@ -22,16 +21,8 @@ impl ParserGenerator {
     }
 }
 
-pub fn parser<'src, E>() -> impl BuilderParser<'src, (), E>
-where
-    E: BuilderExtra<'src>,
-{
-    todo()
-}
-
 #[cfg(test)]
 mod test {
-    use regex_syntax::ParserBuilder;
 
     use crate::codegen::generator::ParserGenerator;
 

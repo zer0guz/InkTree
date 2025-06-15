@@ -10,9 +10,9 @@ proc-macro2 = "1.0.95"
 quote = "1.0.40"
 regex-syntax = "0.8.5"
 snafu = "0.8.6"
+strum = { version = "0.27.1", features = ["derive"] }
 syn = "2.0.101"
-tree_gen_derive = { path = "../tree_gen_derive", optional = true }
 
 [features]
 default = []
-derive = ["dep:tree_gen_derive"]
+derive = []

@@ -29,12 +29,13 @@ where
 {
     fn token_parser(self, kind: E::SyntaxKind) -> impl Parser<'src, Input<'src>, (), E> {
         self.to_slice().map_with(move |slice, extra| {
-            extra.state().token(kind, Some(slice));
-            ()
+            BuilderExtra::token(extra.state(), kind, Some(slice));
         })
     }
     fn with_cp(self) -> impl Parser<'src, Input<'src>, E::Checkpoint, E> {
-        with_cp::<E::SyntaxKind>().then(self).map(|(cp, _)| cp)
+        with_cp::<E::SyntaxKind>()
+            .then(self)
+            .map(|(checkpoint, _)| checkpoint)
     }
     fn as_node(self, kind: E::SyntaxKind) -> impl Parser<'src, Input<'src>, (), E> {
         Self::wrap_cp(self.with_cp(), kind)
@@ -43,10 +44,10 @@ where
         parser: impl Parser<'src, Input<'src>, E::Checkpoint, E>,
         kind: E::SyntaxKind,
     ) -> impl Parser<'src, Input<'src>, (), E> {
-        parser.map_with(move |cp, extra| {
+        parser.map_with(move |checkpoint, extra| {
             let builder = extra.state();
-            builder._start_node_at(cp, kind);
-            builder._finish_node();
+            builder.start_node_at(checkpoint, kind);
+            builder.finish_node();
         })
     }
 }

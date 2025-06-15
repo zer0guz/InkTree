@@ -10,4 +10,4 @@ proc-macro = true
 syn = { version = "2.0" }
 quote = "1.0"
 proc-macro2 = "1.0"
-chumsky = { version = "0.10.1" }
+tree_gen = { version = "0.1.0", path = "../tree_gen" }
