@@ -5,7 +5,7 @@ use regex_syntax::{
 };
 use snafu::ResultExt;
 
-use crate::codegen::{
+use crate::language::{
     CodegenError,
     error::{FromHirSnafu, LookSnafu},
 };

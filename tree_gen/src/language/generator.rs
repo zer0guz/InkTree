@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use crate::codegen::mir::Mir;
+use crate::language::mir::Mir;
 
 struct ParserGenerator;
 
@@ -9,7 +9,7 @@ impl ParserGenerator {
     fn parser(mir: &Mir) -> TokenStream {
         match mir {
             Mir::Empty => Self::into_impl(quote! {any().ignored()}),
-            _ => todo!(),
+            _ => todo!("generator"),
         }
     }
 
@@ -24,7 +24,7 @@ impl ParserGenerator {
 #[cfg(test)]
 mod test {
 
-    use crate::codegen::generator::ParserGenerator;
+    use crate::language::generator::ParserGenerator;
 
     use super::*;
 

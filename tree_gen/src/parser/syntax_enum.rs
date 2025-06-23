@@ -1,65 +1,55 @@
-use proc_macro2::Span;
 use snafu::ResultExt;
-use syn::{DeriveInput, Ident, spanned::Spanned};
+use syn::{Attribute, DeriveInput, Ident, parse::Parse};
 
 use crate::{
-    ParseError,
-    error::*,
-    parser::variant::{SyntaxVariant, VariantError},
+    ReprSnafu, SyntaxError, error::Errors, parser::variant::SyntaxVariant, util::IteratorExt,
 };
 
-pub struct SyntaxEnum {
-    pub ident: Ident,
-    pub attributes: Vec<SyntaxVariant>,
-    pub errors: Vec<VariantError>,
-    pub span: Span,
+pub struct SyntaxEnum<'a> {
+    pub ident: &'a Ident,
+    pub variants: Vec<SyntaxVariant<'a>>,
+    pub source: &'a DeriveInput,
 }
 
-impl SyntaxEnum {
-    pub fn from_input(input: DeriveInput) -> Result<Self, Vec<Error>> {
-        let mut syntax_enum = Self {
-            ident: input.ident.clone(),
-            span: input.span(),
-            errors: vec![],
-            attributes: vec![],
+impl<'a> SyntaxEnum<'a> {
+    pub fn from_input(input: &'a DeriveInput) -> Result<Self, Errors<SyntaxError>> {
+        let syn::Data::Enum(syntax) = &input.data else {
+            return Err(SyntaxError::from(syn::Error::new_spanned(input, "oups")))?;
         };
 
-        let syn::Data::Enum(syntax) = input.data else {
-            todo!("möps")
-        };
+        let variants = syntax
+            .variants
+            .iter()
+            .map(|variant| SyntaxVariant::from_variant(variant))
+            .collect_either_flatten()
+            .map_err(Errors::convert_errors::<SyntaxError>)?;
 
-        for variant in syntax.variants.into_iter() {
-            syntax_enum.parse_variant(variant);
-        }
+        verify_repr(input)?;
 
-        syntax_enum.into_result()
+        Ok(Self {
+            ident: &input.ident,
+            variants,
+            source: input,
+        })
     }
+}
 
-    fn parse_variant(&mut self, variant: syn::Variant) {
-        let mut attrs = variant.attrs;
-        let Some(attr) = attrs.pop() else {
-            //self.attributes.push(SyntaxVariant::None(variant.ident));
-            return;
-        };
+fn verify_repr(input: &DeriveInput) -> Result<(), SyntaxError> {
+    let repr_inner = input
+        .attrs
+        .iter()
+        .filter(|&attr| attr.path().is_ident("repr"))
+        .next()
+        .ok_or_else(|| syn::Error::new_spanned(input, "todo text"))
+        .context(ReprSnafu { message: "no repr" })?
+        .parse_args_with(Ident::parse)
+        .context(ReprSnafu {
+            message: "invalid repr",
+        })?;
 
-        let syntax_variant = match SyntaxVariant::from_attr(attr) {
-            Ok(ok) => ok,
-            Err(err) => {
-                self.errors.push(err);
-                return;
-            }
-        };
-    }
+    if !(repr_inner == "u32") {
+        return Err(SyntaxError::from(syn::Error::new_spanned(input, "oups")))?;
+    };
 
-    fn into_result(self) -> Result<SyntaxEnum, Vec<Error>> {
-        if self.errors.is_empty() {
-            Ok(self)
-        } else {
-            Err(self
-                .errors
-                .into_iter()
-                .map(|err| Error::from(ParseError::from(err)))
-                .collect())
-        }
-    }
+    Ok(())
 }

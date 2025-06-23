@@ -4,9 +4,12 @@ use snafu::Snafu;
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(super)))]
 
-pub enum CodegenError {
+pub enum SemanticError {
     #[snafu(display("Error converting Hir to Mir"))]
-    FromHir { source: regex_syntax::Error },
+    FromHir { source: syn::Error },
+
+    #[snafu(display("Error only one attribute per variant"))]
+    MultipleAttributes { source: syn::Error },
     #[snafu(display("Error converting Hir to Mir"))]
     FromStr,
     #[snafu(display("Error found: {:#?}, lookaround is not supported by this engine", look))]

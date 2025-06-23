@@ -1,8 +1,12 @@
-use snafu::{OptionExt, ResultExt, Snafu};
-use strum::VariantNames;
-use syn::{Attribute, Ident, Meta, punctuated::Punctuated, token::Comma};
+use itertools::Either;
+use snafu::{ResultExt, Snafu};
+use syn::{Ident, Meta, Variant, punctuated::Punctuated, token::Comma};
 
-use crate::properties::{FromMeta, PathNotIdentSnafu, PropertyError, StaticToken, UnsupportedSnafu};
+use crate::{
+    attributes::{AttributeError, AttributeOrProperty, SyntaxAttribute},
+    error::Errors,
+    util::{transpose_errors, IteratorExt}, SemanticError,
+};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(super)))]
@@ -12,89 +16,91 @@ pub enum VariantError {
         source
     ))]
     Scope { source: syn::Error },
+
     #[snafu(display(
         " attributes have to be provided as a comma seperated list: {}",
         source
     ))]
+    #[snafu(context(false))]
     Format { source: syn::Error },
 
     #[snafu(display("Error while parsing the property {}", source))]
     #[snafu(context(false))]
-    Property { source: PropertyError },
+    Property { source: AttributeError },
+
+    #[snafu(display(
+        "tree_gen() has to be called with atleast one property: expected at least one of ['static_token','node','token']"
+    ))]
+    Empty { source: syn::Error },
 }
 
-pub struct SyntaxVariant {
-    pub ident: Ident,
-    pub attributes: Vec<SyntaxAttribute>,
+pub struct SyntaxVariant<'a> {
+    pub ident: &'a Ident,
+    pub meta_elements: Vec<AttributeOrProperty>,
+    pub source: &'a Variant,
 }
 
-impl SyntaxVariant {
-    pub fn from_attr(attr: Attribute) -> Result<Self, VariantError> {
-        let mut attributes = vec![];
-        let list = attr.meta.require_list().context(ScopeSnafu)?;
+impl<'a> SyntaxVariant<'a> {
+    // TODO split into smaller chunks :)
+    pub fn from_variant(input: &'a Variant) -> Result<Self, Errors<VariantError>> {
+        let meta_elements = input
+            .attrs
+            .iter()
+            .filter(|attr| attr.meta.path().is_ident("tree_gen"))
+            .map(|attr| -> Result<_, AttributeError> {
+                let list = attr.meta.require_list()?;
+                let metas = list.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated)?;
 
-        let metas: Vec<Meta> = list
-            .parse_args_with(Punctuated::<Meta, Comma>::parse_terminated)
-            .context(FormatSnafu)?
-            .into_iter()
-            .collect();
-
-        for meta in metas {
-            let a = SyntaxAttribute::from_meta(meta)?;
-            attributes.push(a);
-        }
+                Ok(metas)
+            })
+            .flat_map(transpose_errors)
+            .map(|meta_or_err| {
+                let res = meta_or_err.and_then(|meta| {
+                    let prop = AttributeOrProperty::from_meta(meta)?;
+                    Ok(prop)
+                });
+                match input.fields {
+                    syn::Fields::Unit => (),
+                    _ => {
+                        return Err(AttributeError::from(syn::Error::new_spanned(
+                            input,
+                            "only unit variants supported",
+                        )))?;
+                    }
+                };
+                Ok(res?)
+            })
+            .collect_either()?;
 
         Ok(Self {
-            ident: list
-                .path
-                .get_ident()
-                .expect("top level tree_gen() is always an ident")
-                .clone(),
-            attributes,
+            ident: &input.ident,
+            meta_elements,
+            source: input,
         })
     }
-}
 
-#[derive(Debug, VariantNames)]
-#[strum(serialize_all = "kebab-case")]
-pub enum SyntaxAttribute {
-    #[strum(serialize = "static_token")]
-    StaticToken(StaticToken),
-    //Token(Token),
-    //Node(Node),
-    None(String),
-}
+    pub fn into_attribute(self) -> Result<SyntaxAttribute, Errors<SemanticError>> {
+        // use AttributeOrProperty::*;
+        // let (mut attributes, properties): (Vec<_>, Vec<_>) = variant
+        //     .meta_elements
+        //     .into_iter()
+        //     .partition_map(|a| match a {
+        //         Attribute(attribute) => Either::Left(attribute),
+        //         Property(property) => Either::Right(property),
+        //     });
 
-impl SyntaxAttribute {
-    fn parse(name: &str, meta: Meta) -> Result<Self, PropertyError> {
-        match name {
-            "static_token" => Ok(StaticToken::from_meta(meta)?.into()),
-            #[rustfmt::skip]
-            _ => {
-                UnsupportedSnafu {
-                    source: syn::Error::new_spanned(meta.path(), "Not supported TODO text")
-                }
-                .fail()
-            },
-        }
-    }
-    fn from_meta(meta: Meta) -> Result<Self, PropertyError> {
-        let ident = meta.path().get_ident().context(PathNotIdentSnafu {
-            source: syn::Error::new_spanned(meta.path(), "Path is not an identifier TODO text"),
-        })?;
-        let Some(name) = SyntaxAttribute::VARIANTS
-            .iter()
-            .enumerate()
-            .find_map(|(index, name)| {
-                if name == &ident.to_string().as_str() {
-                    Some(SyntaxAttribute::VARIANTS[index])
-                } else {
-                    None
-                }
-            })
-        else {
-            todo!("not suppoerted todo text")
-        };
-        SyntaxAttribute::parse(name, meta)
+        // let Some(attribute) = attributes.pop() else {
+        //     todo!("empty variant")
+        // };
+
+        // if !attributes.is_empty() {
+        //     return Err(syn::Error::new_spanned(variant.source, "oups"))
+        //         .context(MultipleAttributesSnafu)?;
+        // };
+
+        // Self::verify_properties(&attribute, &properties)?;
+
+        // Ok(attribute.into_element(properties,variant.source))
+        todo!()
     }
 }
