@@ -7,6 +7,7 @@ use crate::{
 
 pub struct SyntaxEnum {
     pub variants: Vec<SyntaxVariant>,
+    pub ident: Ident,
 }
 
 impl SyntaxEnum {
@@ -26,7 +27,7 @@ impl SyntaxEnum {
             .collect_either_flatten()
             .map_err(Errors::convert_errors::<SyntaxError>)?;
 
-        Ok(Self { variants })
+        Ok(Self { variants, ident: input.ident })
     }
 }
 

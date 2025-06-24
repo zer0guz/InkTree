@@ -11,6 +11,8 @@ use crate::{
     },
 };
 
+const ALLOWED: &[SyntaxPropertyKind] = &[];
+
 pub struct StaticToken {
     pub text: String,
 }
@@ -56,7 +58,7 @@ impl FromMetaKind for StaticToken {
 
 impl LanguageElement for StaticToken {
     fn allowed(&self) -> &'static [SyntaxPropertyKind] {
-        &[]
+        ALLOWED
     }
     
     fn codegen(&self,_:&Vec<SyntaxProperty>,ident:&Ident,stream: &mut TokenStream) {

@@ -16,9 +16,9 @@ use crate::{
 };
 
 pub struct Element {
-    attribute: SyntaxAttribute,
+    pub attribute: SyntaxAttribute,
     properties: Vec<SyntaxProperty>,
-    ident: Ident,
+    pub ident: Ident,
 }
 
 impl Element {
