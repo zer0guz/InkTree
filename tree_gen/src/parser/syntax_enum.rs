@@ -1,36 +1,32 @@
 use snafu::ResultExt;
-use syn::{Attribute, DeriveInput, Ident, parse::Parse};
+use syn::{DeriveInput, Ident, parse::Parse};
 
 use crate::{
     ReprSnafu, SyntaxError, error::Errors, parser::variant::SyntaxVariant, util::IteratorExt,
 };
 
-pub struct SyntaxEnum<'a> {
-    pub ident: &'a Ident,
-    pub variants: Vec<SyntaxVariant<'a>>,
-    pub source: &'a DeriveInput,
+pub struct SyntaxEnum {
+    pub variants: Vec<SyntaxVariant>,
 }
 
-impl<'a> SyntaxEnum<'a> {
-    pub fn from_input(input: &'a DeriveInput) -> Result<Self, Errors<SyntaxError>> {
-        let syn::Data::Enum(syntax) = &input.data else {
-            return Err(SyntaxError::from(syn::Error::new_spanned(input, "oups")))?;
+impl SyntaxEnum {
+    pub fn from_input(input: DeriveInput) -> Result<Self, Errors<SyntaxError>> {
+        let correct_repr = verify_repr(&input);
+
+        let syn::Data::Enum(syntax) = input.data else {
+            return Err(SyntaxError::from(syn::Error::new_spanned(&input, "oups")).into());
         };
+
+        correct_repr?;
 
         let variants = syntax
             .variants
-            .iter()
+            .into_iter()
             .map(|variant| SyntaxVariant::from_variant(variant))
             .collect_either_flatten()
             .map_err(Errors::convert_errors::<SyntaxError>)?;
 
-        verify_repr(input)?;
-
-        Ok(Self {
-            ident: &input.ident,
-            variants,
-            source: input,
-        })
+        Ok(Self { variants })
     }
 }
 

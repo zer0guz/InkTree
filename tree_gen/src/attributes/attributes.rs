@@ -1,20 +1,16 @@
 use std::str::FromStr;
 
-use derive_more::From;
 use enum_dispatch::enum_dispatch;
 use snafu::{OptionExt, ResultExt, Snafu};
-use strum::{EnumDiscriminants, EnumString, IntoDiscriminant};
+use strum::{EnumDiscriminants, EnumString};
 use syn::Meta;
 
-use crate::{
-    SemanticError,
+use crate::
     attributes::{
         FromMetaKind, MetaError, Node, StaticToken, Token,
         properties::{SyntaxProperty, SyntaxPropertyKind},
-    },
-    error::Errors,
-    util::IteratorExt,
-};
+    }
+;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(super)))]

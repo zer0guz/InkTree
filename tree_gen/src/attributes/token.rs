@@ -1,16 +1,12 @@
 use syn::Variant;
 
 use crate::{
-    attributes::{properties::SyntaxPropertyKind, SyntaxProperty}, LanguageElement, Verify
+    attributes::{properties::SyntaxPropertyKind, SyntaxProperty}, error::Errors, LanguageElement, SemanticError
 };
 
 #[derive(Debug)]
 pub struct Token {
     pub text: String,
-}
-
-impl Verify for Token {
-    const ALLOWED: &[SyntaxPropertyKind] = &[];
 }
 
 impl LanguageElement for Token {
@@ -22,4 +18,15 @@ impl LanguageElement for Token {
         // };
         // stream.extend(tree);
     }
+    
+    fn allowed(&self) ->  &'static[SyntaxPropertyKind] {
+        todo!()
+    }
+    
+    fn build(&mut self,properties:Vec<SyntaxProperty>,source: Variant){
+        todo!()
+    }
+    
+
+    
 }

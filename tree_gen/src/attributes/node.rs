@@ -1,18 +1,12 @@
 use syn::Variant;
 
-use crate::{
-    attributes::{properties::{SyntaxProperty, SyntaxPropertyKind}, StaticToken}, error::Errors, LanguageElement, SemanticError, Verify
-};
+use crate::{attributes::{SyntaxProperty, SyntaxPropertyKind}, error::Errors, LanguageElement, SemanticError};
+
 
 #[derive(Debug)]
 pub struct Node {
     pub text: String,
 }
-
-impl Verify for Node {
-    const ALLOWED: &[SyntaxPropertyKind] = &[];
-}
-
 
 impl LanguageElement for Node {
     fn codegen(&self, stream: &mut proc_macro2::TokenStream) {
@@ -23,4 +17,15 @@ impl LanguageElement for Node {
         // };
         // stream.extend(tree);
     }
+    
+    fn allowed(&self) ->  &'static[SyntaxPropertyKind] {
+        todo!()
+    }
+    
+    fn build(&mut self,properties:Vec<SyntaxProperty>,source: Variant) {
+        todo!()
+    }
+    
+    
+    
 }

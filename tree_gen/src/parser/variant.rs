@@ -1,11 +1,13 @@
-use itertools::Either;
+use itertools::{Either, Itertools};
 use snafu::{ResultExt, Snafu};
 use syn::{Ident, Meta, Variant, punctuated::Punctuated, token::Comma};
 
 use crate::{
+    LanguageElement, MultipleAttributesSnafu, SemanticError,
     attributes::{AttributeError, AttributeOrProperty, SyntaxAttribute},
     error::Errors,
-    util::{transpose_errors, IteratorExt}, SemanticError,
+    util::{IteratorExt, transpose_errors},
+    verify_properties,
 };
 
 #[derive(Debug, Snafu)]
@@ -34,15 +36,14 @@ pub enum VariantError {
     Empty { source: syn::Error },
 }
 
-pub struct SyntaxVariant<'a> {
-    pub ident: &'a Ident,
+pub struct SyntaxVariant {
     pub meta_elements: Vec<AttributeOrProperty>,
-    pub source: &'a Variant,
+    pub source: Variant,
 }
 
-impl<'a> SyntaxVariant<'a> {
+impl SyntaxVariant {
     // TODO split into smaller chunks :)
-    pub fn from_variant(input: &'a Variant) -> Result<Self, Errors<VariantError>> {
+    pub fn from_variant(input: Variant) -> Result<Self, Errors<VariantError>> {
         let meta_elements = input
             .attrs
             .iter()
@@ -63,7 +64,7 @@ impl<'a> SyntaxVariant<'a> {
                     syn::Fields::Unit => (),
                     _ => {
                         return Err(AttributeError::from(syn::Error::new_spanned(
-                            input,
+                            &input,
                             "only unit variants supported",
                         )))?;
                     }
@@ -73,34 +74,31 @@ impl<'a> SyntaxVariant<'a> {
             .collect_either()?;
 
         Ok(Self {
-            ident: &input.ident,
             meta_elements,
             source: input,
         })
     }
 
     pub fn into_attribute(self) -> Result<SyntaxAttribute, Errors<SemanticError>> {
-        // use AttributeOrProperty::*;
-        // let (mut attributes, properties): (Vec<_>, Vec<_>) = variant
-        //     .meta_elements
-        //     .into_iter()
-        //     .partition_map(|a| match a {
-        //         Attribute(attribute) => Either::Left(attribute),
-        //         Property(property) => Either::Right(property),
-        //     });
+        use AttributeOrProperty::*;
+        let (mut attributes, properties): (Vec<_>, Vec<_>) =
+            self.meta_elements.into_iter().partition_map(|a| match a {
+                Attribute(attribute) => Either::Left(attribute),
+                Property(property) => Either::Right(property),
+            });
 
-        // let Some(attribute) = attributes.pop() else {
-        //     todo!("empty variant")
-        // };
+        let Some(mut attribute) = attributes.pop() else {
+            todo!("empty variant")
+        };
 
-        // if !attributes.is_empty() {
-        //     return Err(syn::Error::new_spanned(variant.source, "oups"))
-        //         .context(MultipleAttributesSnafu)?;
-        // };
+        if !attributes.is_empty() {
+            return Err(syn::Error::new_spanned(self.source, "oups"))
+                .context(MultipleAttributesSnafu)?;
+        };
+        verify_properties(&attribute, &properties)?;
 
-        // Self::verify_properties(&attribute, &properties)?;
+        attribute.build(properties, self.source);
 
-        // Ok(attribute.into_element(properties,variant.source))
-        todo!()
+        Ok(attribute)
     }
 }

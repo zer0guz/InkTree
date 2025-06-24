@@ -1,16 +1,23 @@
+use quote::quote;
 use snafu::ResultExt;
 use strum::IntoDiscriminant;
-use syn::{Lit, LitStr, MetaList, Variant};
+use syn::{Ident, Lit, LitStr, MetaList, Variant};
 
 use crate::{
+    LanguageElement, SemanticError,
     attributes::{
-        from_meta::{PathSnafu, ValueSnafu}, properties::{SyntaxProperty, SyntaxPropertyKind}, AttributeError, FromMetaKind, SyntaxAttribute
-    }, error::Errors, util::IteratorExt, LanguageElement, SemanticError, Verify
+        AttributeError, FromMetaKind, SyntaxAttribute,
+        from_meta::{PathSnafu, ValueSnafu},
+        properties::{SyntaxProperty, SyntaxPropertyKind},
+    },
+    error::Errors,
+    util::IteratorExt,
 };
 
 pub struct StaticToken {
     pub text: String,
-    properties: Vec<SyntaxProperty>
+    properties: Vec<SyntaxProperty>,
+    source: Option<Variant>,
 }
 
 impl StaticToken {
@@ -20,14 +27,24 @@ impl StaticToken {
             Lit::ByteStr(lit_byte_str) => todo!("support byte str"),
             _ => todo!("lit type error"),
         };
-        Ok(Self { text, properties: todo!() })
+        Ok(Self {
+            text,
+            properties: vec![],
+            source: None,
+        })
     }
 }
 
 impl FromMetaKind for StaticToken {
     fn from_list(list: &MetaList) -> Result<SyntaxAttribute, AttributeError> {
         let lit: LitStr = list.parse_args()?;
-        Ok(Self { text: lit.value(), properties: todo!() }.into())
+        Ok(Self {
+            text: lit.value(),
+            properties: vec![],
+            source: None,
+
+        }
+        .into())
     }
 
     fn from_path(path: &syn::Path) -> Result<SyntaxAttribute, AttributeError> {
@@ -46,18 +63,21 @@ impl FromMetaKind for StaticToken {
     }
 }
 
-impl Verify for StaticToken {
-    const ALLOWED: &[SyntaxPropertyKind] = &[];
-}
-
-
 impl LanguageElement for StaticToken {
     fn codegen(&self, stream: &mut proc_macro2::TokenStream) {
-        // let span = self.source.span();
-        // let ident = &self.source.ident;
-        // let tree = quote!{ span=>
-        //     struct #ident {}
-        // };
-        // stream.extend(tree);
+        let ident = &self.source.as_ref().unwrap().ident;
+        let tree = quote! {
+           struct #ident;
+        };
+        stream.extend(tree);
+    }
+
+    fn allowed(&self) -> &'static [SyntaxPropertyKind] {
+        &[]
+    }
+    
+    fn build(&mut self,properties:Vec<SyntaxProperty>,source: Variant) {
+        self.properties = properties;
+        self.source = Some(source);
     }
 }

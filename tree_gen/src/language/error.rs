@@ -2,7 +2,7 @@ use regex_syntax::hir::Look;
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility(pub(super)))]
+#[snafu(visibility(pub(crate)))]
 
 pub enum SemanticError {
     #[snafu(display("Error converting Hir to Mir"))]

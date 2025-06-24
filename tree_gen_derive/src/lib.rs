@@ -11,7 +11,7 @@ pub fn syntax_generator(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 }
 
 fn derive(input: DeriveInput) -> Result<TokenStream, Error> {
-    Language::from_input(&input)?.codegen()
+    Language::from_input(input)?.codegen()
 }
 
 fn into_compile_error(error: Error) -> proc_macro2::TokenStream {

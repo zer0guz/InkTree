@@ -1,4 +1,5 @@
 use proc_macro2::TokenStream;
+use quote::{TokenStreamExt,quote};
 use syn::DeriveInput;
 
 use crate::{attributes::SyntaxAttribute, util::IteratorExt, Error, LanguageElement, SyntaxEnum};
@@ -18,7 +19,7 @@ impl Language {
         Ok(Self { elements })
     }
 
-    pub fn from_input(input: &DeriveInput) -> Result<Self, Error> {
+    pub fn from_input(input: DeriveInput) -> Result<Self, Error> {
         Self::from_enum(SyntaxEnum::from_input(input)?)
     }
 
@@ -26,7 +27,6 @@ impl Language {
         let mut stream = TokenStream::new();
         for element in &self.elements {
              element.codegen(&mut stream);
-
         }
         Ok(stream)
     }

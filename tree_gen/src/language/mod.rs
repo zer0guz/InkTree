@@ -3,9 +3,8 @@ mod error;
 //mod mir;
 mod element;
 mod language;
-mod structs;
 //mod implementations;
 
-pub use element::{Verify,LanguageElement};
-pub use error::SemanticError;
+pub use element::{LanguageElement,verify_properties};
+pub use error::*;
 pub use language::Language;
