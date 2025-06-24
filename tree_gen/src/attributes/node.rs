@@ -1,7 +1,9 @@
-use syn::Variant;
+use proc_macro2::TokenStream;
+use syn::Ident;
 
-use crate::{attributes::{SyntaxProperty, SyntaxPropertyKind}, error::Errors, LanguageElement, SemanticError};
-
+use crate::{
+    LanguageElement, attributes::{SyntaxProperty, SyntaxPropertyKind},
+};
 
 #[derive(Debug)]
 pub struct Node {
@@ -9,23 +11,12 @@ pub struct Node {
 }
 
 impl LanguageElement for Node {
-    fn codegen(&self, stream: &mut proc_macro2::TokenStream) {
-        // let span = self.source.span();
-        // let ident = &self.source.ident;
-        // let tree = quote!{ span=>
-        //     struct #ident {}
-        // };
-        // stream.extend(tree);
-    }
-    
-    fn allowed(&self) ->  &'static[SyntaxPropertyKind] {
+    fn allowed(&self) -> &'static [SyntaxPropertyKind] {
         todo!()
     }
     
-    fn build(&mut self,properties:Vec<SyntaxProperty>,source: Variant) {
+    fn codegen(&self,_: &Vec<SyntaxProperty>,_: &Ident,_: &mut TokenStream) {
         todo!()
     }
-    
-    
-    
+
 }

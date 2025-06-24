@@ -13,7 +13,7 @@ pub enum SyntaxProperty {
 }
 
 impl SyntaxPropertyKind {
-    pub fn from_meta(self, meta: &Meta) -> Result<SyntaxProperty, AttributeError> {
-        todo!("from meta kind")
+    pub fn from_meta(self, _: &Meta) -> Result<SyntaxProperty, AttributeError> {
+        todo!("from meta (property)")
     }
 }

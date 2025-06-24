@@ -1,36 +1,29 @@
+use proc_macro2::TokenStream;
 use quote::quote;
 use snafu::ResultExt;
-use strum::IntoDiscriminant;
-use syn::{Ident, Lit, LitStr, MetaList, Variant};
+use syn::{Ident, Lit, LitStr, MetaList};
 
 use crate::{
-    LanguageElement, SemanticError,
-    attributes::{
+    LanguageElement, attributes::{
         AttributeError, FromMetaKind, SyntaxAttribute,
         from_meta::{PathSnafu, ValueSnafu},
         properties::{SyntaxProperty, SyntaxPropertyKind},
     },
-    error::Errors,
-    util::IteratorExt,
 };
 
 pub struct StaticToken {
     pub text: String,
-    properties: Vec<SyntaxProperty>,
-    source: Option<Variant>,
 }
 
 impl StaticToken {
     fn from_lit(lit: &Lit) -> Result<Self, AttributeError> {
         let text = match lit {
-            Lit::Str(lit_str) => lit_str.value(),
-            Lit::ByteStr(lit_byte_str) => todo!("support byte str"),
+            Lit::Str(str) => str.value(),
+            Lit::ByteStr(_) => todo!("support byte str"),
             _ => todo!("lit type error"),
         };
         Ok(Self {
             text,
-            properties: vec![],
-            source: None,
         })
     }
 }
@@ -40,8 +33,6 @@ impl FromMetaKind for StaticToken {
         let lit: LitStr = list.parse_args()?;
         Ok(Self {
             text: lit.value(),
-            properties: vec![],
-            source: None,
 
         }
         .into())
@@ -64,20 +55,15 @@ impl FromMetaKind for StaticToken {
 }
 
 impl LanguageElement for StaticToken {
-    fn codegen(&self, stream: &mut proc_macro2::TokenStream) {
-        let ident = &self.source.as_ref().unwrap().ident;
+    fn allowed(&self) -> &'static [SyntaxPropertyKind] {
+        &[]
+    }
+    
+    fn codegen(&self,_:&Vec<SyntaxProperty>,ident:&Ident,stream: &mut TokenStream) {
         let tree = quote! {
            struct #ident;
         };
         stream.extend(tree);
     }
-
-    fn allowed(&self) -> &'static [SyntaxPropertyKind] {
-        &[]
-    }
     
-    fn build(&mut self,properties:Vec<SyntaxProperty>,source: Variant) {
-        self.properties = properties;
-        self.source = Some(source);
-    }
 }

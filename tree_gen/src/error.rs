@@ -89,7 +89,7 @@ where
     E: std::error::Error,
 {
     fn into(self) -> Vec<E> {
-        todo!("1")
+        self.0
     }
 }
 
@@ -97,8 +97,8 @@ impl<E> Display for Errors<E>
 where
     E: std::error::Error,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!("2")
+    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!("format")
     }
 }
 
@@ -107,11 +107,6 @@ impl<E: std::error::Error> From<Vec<E>> for Errors<E> {
         Self(value)
     }
 }
-// impl<E: std::error::Error> From<E> for Errors<E> {
-//     fn from(value: E) -> Self {
-//         Errors(vec![value])
-//     }
-// }
 
 impl<E: std::error::Error> std::error::Error for Errors<E> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {

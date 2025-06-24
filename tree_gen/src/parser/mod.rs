@@ -1,11 +1,9 @@
 mod syntax_enum;
 mod variant;
 
-use quote::ToTokens;
 pub use syntax_enum::SyntaxEnum;
 pub use variant::SyntaxVariant;
 
-use crate::error::Errors;
 use crate::parser::variant::VariantError;
 use snafu::Snafu;
 

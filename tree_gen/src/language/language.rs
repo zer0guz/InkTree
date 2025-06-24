@@ -1,11 +1,10 @@
 use proc_macro2::TokenStream;
-use quote::{TokenStreamExt,quote};
 use syn::DeriveInput;
 
-use crate::{attributes::SyntaxAttribute, util::IteratorExt, Error, LanguageElement, SyntaxEnum};
+use crate::{language::element::Element, util::IteratorExt, Error, SyntaxEnum};
 
 pub struct Language {
-    elements: Vec<SyntaxAttribute>,
+    elements: Vec<Element>,
 }
 
 impl Language {
@@ -13,7 +12,7 @@ impl Language {
         let elements = syntax
             .variants
             .into_iter()
-            .map(|variant| variant.into_attribute())
+            .map(|variant| Element::from_variant(variant))
             .collect_either_flatten()?;
 
         Ok(Self { elements })

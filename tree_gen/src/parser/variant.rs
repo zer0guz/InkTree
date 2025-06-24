@@ -1,13 +1,10 @@
-use itertools::{Either, Itertools};
-use snafu::{ResultExt, Snafu};
-use syn::{Ident, Meta, Variant, punctuated::Punctuated, token::Comma};
+use snafu::Snafu;
+use syn::{Meta, Variant, punctuated::Punctuated, token::Comma};
 
 use crate::{
-    LanguageElement, MultipleAttributesSnafu, SemanticError,
-    attributes::{AttributeError, AttributeOrProperty, SyntaxAttribute},
+    attributes::{AttributeError, AttributeOrProperty},
     error::Errors,
     util::{IteratorExt, transpose_errors},
-    verify_properties,
 };
 
 #[derive(Debug, Snafu)]
@@ -77,28 +74,5 @@ impl SyntaxVariant {
             meta_elements,
             source: input,
         })
-    }
-
-    pub fn into_attribute(self) -> Result<SyntaxAttribute, Errors<SemanticError>> {
-        use AttributeOrProperty::*;
-        let (mut attributes, properties): (Vec<_>, Vec<_>) =
-            self.meta_elements.into_iter().partition_map(|a| match a {
-                Attribute(attribute) => Either::Left(attribute),
-                Property(property) => Either::Right(property),
-            });
-
-        let Some(mut attribute) = attributes.pop() else {
-            todo!("empty variant")
-        };
-
-        if !attributes.is_empty() {
-            return Err(syn::Error::new_spanned(self.source, "oups"))
-                .context(MultipleAttributesSnafu)?;
-        };
-        verify_properties(&attribute, &properties)?;
-
-        attribute.build(properties, self.source);
-
-        Ok(attribute)
     }
 }
