@@ -28,6 +28,21 @@ impl StaticToken {
             text,
         })
     }
+    
+    fn functions(&self) -> TokenStream {
+        let parser = self.parser();
+        quote! {
+            #parser
+        }
+    }
+    
+    fn parser(&self) -> TokenStream {
+        quote! {
+            pub fn parser(){
+                
+            }
+        }
+    }
 }
 
 impl FromMetaKind for StaticToken {
@@ -62,10 +77,15 @@ impl LanguageElement for StaticToken {
     }
     
     fn codegen(&self,_:&Vec<SyntaxProperty>,ident:&Ident,stream: &mut TokenStream) {
-        let tree = quote! {
-           struct #ident;
+        let functions = self.functions();
+        
+        let code = quote! {
+            struct #ident;
+            impl #ident {
+                #functions
+            }
         };
-        stream.extend(tree);
+        stream.extend(code);
+
     }
-    
 }

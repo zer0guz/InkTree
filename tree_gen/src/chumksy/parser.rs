@@ -13,7 +13,8 @@ pub trait BuilderParser<'src, O, E>: Parser<'src, Input<'src>, O, E>
 where
     E: BuilderExtra<'src>,
 {
-    fn token_parser(self, kind: E::SyntaxKind) -> impl Parser<'src, Input<'src>, (), E>;
+    fn as_token(self, kind: E::SyntaxKind) -> impl Parser<'src, Input<'src>, (), E>;
+    fn as_static_token(self, kind: E::SyntaxKind) -> impl Parser<'src, Input<'src>, (), E>;
     fn as_node(self, kind: E::SyntaxKind) -> impl Parser<'src, Input<'src>, (), E>;
     fn wrap_cp(
         parser: impl Parser<'src, Input<'src>, E::Checkpoint, E>,
@@ -27,9 +28,14 @@ where
     E: BuilderExtra<'src>,
     P: chumsky::Parser<'src, &'src str, O, E>,
 {
-    fn token_parser(self, kind: E::SyntaxKind) -> impl Parser<'src, Input<'src>, (), E> {
+    fn as_token(self, kind: E::SyntaxKind) -> impl Parser<'src, Input<'src>, (), E> {
         self.to_slice().map_with(move |slice, extra| {
             BuilderExtra::token(extra.state(), kind, Some(slice));
+        })
+    }
+    fn as_static_token(self, kind: E::SyntaxKind) -> impl Parser<'src, Input<'src>, (), E> {
+        self.ignored().map_with(move |_, extra| {
+            BuilderExtra::token(extra.state(), kind, None);
         })
     }
     fn with_cp(self) -> impl Parser<'src, Input<'src>, E::Checkpoint, E> {
