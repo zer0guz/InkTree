@@ -3,41 +3,6 @@ use std::fmt::Display;
 use proc_macro2::TokenStream;
 use snafu::{AsErrorSource, Snafu};
 
-use crate::{SemanticError, SyntaxError};
-
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub(super)))]
-pub enum Error {
-    #[snafu(display("Error during codegen"))]
-    #[snafu(context(false))]
-    CodeGen { source: Errors<SemanticError> },
-    #[snafu(display("Error while parsing   {}", source))]
-    #[snafu(context(false))]
-    Parse { source: Errors<SyntaxError> },
-}
-
-impl Error {
-    pub fn into_compile_errors(self) -> Vec<proc_macro2::TokenStream> {
-        fn find_source(mut error: &(dyn std::error::Error + 'static)) -> TokenStream {
-            while !error.is::<syn::Error>() {
-                error = error.source().unwrap()
-            }
-            let span = error.downcast_ref::<syn::Error>().unwrap().span();
-            syn::Error::new(span, format!("{}", error)).into_compile_error()
-        }
-        let errors = match self {
-            Error::CodeGen { source } => source.into_compile_errors(),
-            Error::Parse { source } => source
-                .0
-                .into_iter()
-                .map(|err| find_source(err.as_error_source()))
-                .collect(),
-        };
-
-        errors
-    }
-}
-
 #[derive(Debug)]
 pub struct Errors<E>(pub Vec<E>)
 where
@@ -60,8 +25,8 @@ where
             .map(|err| find_source(err.as_error_source()))
             .collect()
     }
-    pub fn convert_errors<T: snafu::Error + std::convert::From<E>>(self) -> Errors<T> {
-        self.0.into_iter().map(Into::into).collect()
+    pub fn map_errors<T: snafu::Error + std::convert::From<E>>(self) -> Errors<T> {
+        self.0.into_iter().map(T::from).collect()
     }
 }
 

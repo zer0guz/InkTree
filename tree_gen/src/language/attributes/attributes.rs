@@ -1,19 +1,27 @@
 use std::str::FromStr;
 
+use chumsky::{
+    Parser,
+    extra::{Full, ParserExtra},
+    prelude::todo,
+};
 use enum_dispatch::enum_dispatch;
 use snafu::{OptionExt, ResultExt, Snafu};
 use strum::{EnumDiscriminants, EnumString};
 use syn::Meta;
 
-use crate::
-    attributes::{
-        FromMetaKind, MetaError, Node, StaticToken, Token,
-        properties::{SyntaxProperty, SyntaxPropertyKind},
-    }
-;
+use crate::{
+    Builder, Syntax,
+    attributes::node::NodeError,
+    chumksy_ext::Input,
+    language::attributes::{
+        Node, Root, StaticToken, SyntaxProperty, Token, properties::SyntaxPropertyKind,
+    },
+    parser::{FromMeta, MetaError},
+};
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility(pub(super)))]
+#[snafu(visibility(pub(crate)))]
 pub enum AttributeError {
     #[snafu(display("the attribute {}", source))]
     PathNotIdent {
@@ -25,6 +33,10 @@ pub enum AttributeError {
     #[snafu(context(false))]
     Meta { source: MetaError },
 
+    #[snafu(display("meta text todo {}", source))]
+    #[snafu(context(false))]
+    Node { source: NodeError },
+
     #[snafu(display("syn text todo {}", source))]
     #[snafu(context(false))]
     Syn { source: syn::Error },
@@ -34,22 +46,23 @@ pub enum AttributeError {
 }
 
 #[derive(EnumDiscriminants)]
-#[strum(serialize_all = "kebab-case")]
-#[strum_discriminants(vis(pub))]
+#[strum_discriminants(vis(pub), strum(serialize_all = "snake_case"))]
 #[strum_discriminants(name(SyntaxAttributeKind), derive(EnumString))]
 #[enum_dispatch(LanguageElement)]
 pub enum SyntaxAttribute {
-    #[strum_discriminants(strum(serialize = "static_token"))]
     StaticToken(StaticToken),
     Node(Node),
     Token(Token),
+    Root(Root),
 }
 
 impl SyntaxAttributeKind {
     pub fn from_meta(self, meta: &Meta) -> Result<SyntaxAttribute, AttributeError> {
         match self {
             SyntaxAttributeKind::StaticToken => StaticToken::from_meta(meta),
-            _ => todo!(),
+            SyntaxAttributeKind::Root => Root::from_meta(meta),
+            SyntaxAttributeKind::Node => Node::from_meta(meta),
+            SyntaxAttributeKind::Token => Token::from_meta(meta),
         }
     }
 }
@@ -73,4 +86,20 @@ impl AttributeOrProperty {
             Err(syn::Error::new_spanned(ident, "unsupported todo text")).context(UnsupportedSnafu)
         }
     }
+}
+
+pub trait Parseable: Sized
+where
+    Self::Syntax: Syntax + 'static,
+{
+    type Syntax;
+
+    fn parser<'src, 'cache, 'interner, Err>()
+    -> impl Parser<'src, Input<'src>, (), Full<Err, Builder<'cache, 'interner, Self::Syntax>, ()>>
+    where
+        Err: chumsky::error::Error<'src, &'src str> + 'src,
+        'cache: 'src,
+        'interner: 'src,
+        'interner: 'cache,
+    ;
 }

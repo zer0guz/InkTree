@@ -2,7 +2,7 @@ use derive_more::From;
 use strum::{EnumDiscriminants, EnumString};
 use syn::Meta;
 
-use crate::attributes::AttributeError;
+use crate::language::attributes::AttributeError;
 
 #[derive(Debug, PartialEq, Eq, EnumDiscriminants, From)]
 #[strum(serialize_all = "kebab-case")]

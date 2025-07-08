@@ -1,9 +1,12 @@
-mod error;
 //mod mir;
-mod element;
+pub mod attributes;
+mod builder;
+mod code;
 mod language;
-mod util;
+mod syntax;
 
-pub use element::{LanguageElement,verify_properties};
-pub use error::*;
+pub use builder::{Builder, LanguageBuilder};
 pub use language::Language;
+pub use syntax::Syntax;
+
+pub use language::{LanguageElement, LanguageError};

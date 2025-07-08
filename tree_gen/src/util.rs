@@ -34,6 +34,26 @@ pub trait IteratorExt: Iterator {
                 ys.into()
             })
     }
+    fn collect_either_flatten_into<T, E, U>(mut self) -> Result<Vec<T>, Errors<U>>
+    where
+        Self: Sized + Iterator<Item = Result<T, Errors<E>>>,
+        E: snafu::Error,
+        U: From<E> + snafu::Error,
+    {
+        self.by_ref()
+            .try_fold(Vec::new(), |mut xs: Vec<T>, xy: Result<T, Errors<E>>| {
+                xs.push(xy.map_err(|y| Vec::from(y.0))?);
+                Ok(xs)
+            })
+            .map_err(|mut ys: Vec<E>| {
+                ys.extend(
+                    self.filter_map(Result::err)
+                        .into_iter()
+                        .flat_map(|errs| errs.0),
+                );
+                ys.into_iter().map(|err| U::from(err)).collect()
+            })
+    }
 }
 
 impl<A> IteratorExt for A where A: Iterator {}

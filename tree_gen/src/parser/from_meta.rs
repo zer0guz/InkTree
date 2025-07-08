@@ -4,7 +4,7 @@ use syn::{Meta, MetaList, MetaNameValue, Path};
 use crate::attributes::{AttributeError, SyntaxAttribute};
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility(pub(super)))]
+#[snafu(visibility(pub(crate)))]
 pub enum MetaError {
     #[snafu(display("list not supported for this property: {}", source))]
     List { source: syn::Error },
@@ -16,7 +16,7 @@ pub enum MetaError {
     Value { source: syn::Error },
 }
 
-pub trait FromMetaKind: Sized {
+pub trait FromMeta: Sized {
     fn from_meta(meta: &Meta) -> Result<SyntaxAttribute, AttributeError> {
         match meta {
             Meta::Path(path) => Self::from_path(path),
