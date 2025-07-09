@@ -37,7 +37,8 @@ pub fn ebnf_parser<'a>() -> impl Parser<'a, &'a [Token], Expr> {
     recursive(|expr| {
         let atom = select! { Token::Ident(s) => Expr::Just(s.to_owned()) }.or(expr
             .clone()
-            .delimited_by(just(Token::LParen), just(Token::RParen)));
+            .delimited_by(just(Token::LParen), just(Token::RParen)))
+            .boxed();
 
         let unary = atom
             .clone()
@@ -70,7 +71,7 @@ pub fn ebnf_parser<'a>() -> impl Parser<'a, &'a [Token], Expr> {
                     v.extend(rest);
                     Expr::Seq(v)
                 }
-            });
+            }).boxed();
 
         seq.clone()
             .then(
@@ -89,7 +90,7 @@ pub fn ebnf_parser<'a>() -> impl Parser<'a, &'a [Token], Expr> {
                     }
                     Expr::Alt(Box::new(first), Box::new(nested))
                 }
-            })
+            }).boxed()
     })
 }
 

@@ -1,4 +1,4 @@
-//mod mir;
+mod mir;
 pub mod attributes;
 mod builder;
 mod code;

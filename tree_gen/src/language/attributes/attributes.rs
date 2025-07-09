@@ -6,18 +6,16 @@ use chumsky::{
     prelude::todo,
 };
 use enum_dispatch::enum_dispatch;
+use proc_macro2::TokenStream;
+use quote::quote;
 use snafu::{OptionExt, ResultExt, Snafu};
 use strum::{EnumDiscriminants, EnumString};
-use syn::Meta;
+use syn::{Ident, Meta};
 
 use crate::{
-    Builder, Syntax,
-    attributes::node::NodeError,
-    chumksy_ext::Input,
-    language::attributes::{
-        Node, Root, StaticToken, SyntaxProperty, Token, properties::SyntaxPropertyKind,
-    },
-    parser::{FromMeta, MetaError},
+    attributes::{node::NodeError, token::TokenError}, chumksy_ext::Input, language::attributes::{
+        properties::SyntaxPropertyKind, Node, Root, StaticToken, SyntaxProperty, Token
+    }, parser::{FromMeta, MetaError}, Builder, BuilderParser, Syntax
 };
 
 #[derive(Debug, Snafu)]
@@ -36,6 +34,10 @@ pub enum AttributeError {
     #[snafu(display("meta text todo {}", source))]
     #[snafu(context(false))]
     Node { source: NodeError },
+
+        #[snafu(display("meta text todo {}", source))]
+    #[snafu(context(false))]
+    Token { source: TokenError },
 
     #[snafu(display("syn text todo {}", source))]
     #[snafu(context(false))]
@@ -95,11 +97,29 @@ where
     type Syntax;
 
     fn parser<'src, 'cache, 'interner, Err>()
-    -> impl Parser<'src, Input<'src>, (), Full<Err, Builder<'cache, 'interner, Self::Syntax>, ()>>
+    -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Self::Syntax>
     where
         Err: chumsky::error::Error<'src, &'src str> + 'src,
         'cache: 'src,
         'interner: 'src,
-        'interner: 'cache,
-    ;
+        'interner: 'cache;
 }
+
+pub fn parseable_impl(parser: TokenStream, ident: &Ident, lang_ident: &Ident) -> TokenStream {
+    quote! {
+        impl ::tree_gen::attributes::Parseable for #ident {
+            type Syntax = TestLang;
+
+            fn parser<'src, 'cache, 'interner, Err>()
+            -> impl ::tree_gen::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident>
+            where
+                Err: chumsky::error::Error<'src, &'src str> + 'src,
+                'cache: 'src,
+                'interner: 'cache,
+            {
+                #parser
+            }
+        }
+    }
+}
+

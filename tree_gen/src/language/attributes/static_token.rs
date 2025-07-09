@@ -6,13 +6,10 @@ use snafu::ResultExt;
 use syn::{Ident, Lit, LitStr, MetaList};
 
 use crate::{
-    LanguageElement,
-    attributes::{SyntaxProperty, properties},
-    language::{
-        attributes::{AttributeError, SyntaxAttribute, properties::SyntaxPropertyKind},
+    attributes::{parseable_impl, properties, SyntaxProperty}, language::{
+        attributes::{properties::SyntaxPropertyKind, AttributeError, SyntaxAttribute},
         code::struct_def,
-    },
-    parser::{FromMeta, PathSnafu, ValueSnafu},
+    }, parser::{FromMeta, PathSnafu, ValueSnafu}, LanguageElement
 };
 
 const ALLOWED: &[SyntaxPropertyKind] = &[];
@@ -63,7 +60,7 @@ impl LanguageElement for StaticToken {
     ) -> Result<TokenStream, AttributeError> {
         let def_body = quote! {};
         let def = struct_def(def_body, &ident);
-        let impl_code = static_token_impl("test", ident, lang_ident);
+        let impl_code = static_token_impl(&self.text, ident, lang_ident);
         Ok(quote! {
             #def
             #impl_code
@@ -92,22 +89,10 @@ impl LanguageElement for StaticToken {
 // }
 
 pub fn static_token_impl(text: &str, ident: &Ident, lang_ident: &Ident) -> TokenStream {
-    quote! {
-        impl #ident {
-            const fn into_syntax() ->#lang_ident {
-                return #lang_ident::#ident;
-            }
-            pub fn parser<'src, 'cache, 'interner, Err>()
-            -> impl ::tree_gen::BuilderParser<'src, 'cache, 'interner, (), Err, ::tree_gen::Builder<'cache, 'interner, #lang_ident>>
-            where
-                Err: ::tree_gen::chumsky::error::Error<'src, &'src str> + 'src,
-                'cache: 'src,
-                'interner: 'src,
-                'interner: 'cache,
-            {
-                use ::tree_gen::BuilderParser;
-                ::tree_gen::chumsky::prelude::just(#text).as_static_token(#lang_ident::#ident)
-            }
-        }
-    }
+    let parser = quote! {
+        use ::tree_gen::BuilderParser;
+        ::tree_gen::chumsky::prelude::just(#text).as_static_token(#lang_ident::#ident)
+    };
+    parseable_impl(parser, ident, lang_ident)
 }
+

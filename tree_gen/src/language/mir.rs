@@ -1,14 +1,17 @@
 pub use regex_syntax::hir::{Class, Literal};
 use regex_syntax::{
     ParserBuilder,
-    hir::{Hir, HirKind},
+    hir::{Hir, HirKind, Look},
 };
-use snafu::ResultExt;
+use snafu::{ResultExt, Snafu};
 
-use crate::language::{
-    CodegenError,
-    error::{FromHirSnafu, LookSnafu},
-};
+#[derive(Debug, Snafu)]
+pub enum MirError {
+    #[snafu(display("todo"))]
+    FromHir { source: regex_syntax::Error },
+    #[snafu(display("todo"))]
+    Look { look: Look },
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 
@@ -30,8 +33,9 @@ pub enum Mir {
 }
 
 impl Mir {
-    pub fn parse(input: &str) -> Result<Self, CodegenError> {
+    pub fn parse(input: &str) -> Result<Self, MirError> {
         let hir = ParserBuilder::new()
+            .unicode(false)
             .build()
             .parse(input)
             .context(FromHirSnafu)?;
@@ -40,9 +44,9 @@ impl Mir {
 }
 
 impl TryFrom<Hir> for Mir {
-    type Error = CodegenError;
+    type Error = MirError;
 
-    fn try_from(hir: Hir) -> Result<Self, CodegenError> {
+    fn try_from(hir: Hir) -> Result<Self, MirError> {
         match hir.into_kind() {
             HirKind::Empty => Ok(Mir::Empty),
             HirKind::Concat(concat) => {

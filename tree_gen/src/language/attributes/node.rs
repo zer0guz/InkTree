@@ -7,7 +7,7 @@ use snafu::{ResultExt, Snafu};
 use syn::{Ident, LitStr, MetaList};
 
 use crate::{
-    attributes::{properties::SyntaxPropertyKind, AttributeError, SyntaxAttribute, SyntaxProperty}, language::code::struct_def, parser::{ebnf_parser, lexer, Expr, FromMeta, PathSnafu, ValueSnafu}, util::IteratorExt, Errors, LanguageElement
+    attributes::{parseable_impl, properties::SyntaxPropertyKind, AttributeError, SyntaxAttribute, SyntaxProperty}, language::code::struct_def, parser::{ebnf_parser, lexer, Expr, FromMeta, PathSnafu, ValueSnafu}, util::IteratorExt, Errors, LanguageElement
 };
 
 #[derive(Debug, Snafu)]
@@ -100,22 +100,10 @@ impl LanguageElement for Node {
 
 
 pub fn node_impl(ident: &Ident, lang_ident: &Ident,body: TokenStream) -> TokenStream {
-    quote! {
-        impl #ident {
-            const fn into_syntax() ->#lang_ident {
-                return #lang_ident::#ident;
-            }
-            pub fn parser<'src, 'cache, 'interner, Err>()
-            -> impl ::tree_gen::BuilderParser<'src, 'cache, 'interner, (), Err, ::tree_gen::Builder<'cache, 'interner, #lang_ident>>
-            where
-                Err: ::tree_gen::chumsky::error::Error<'src, &'src str> + 'src,
-                'cache: 'src,
-                'interner: 'src,
-                'interner: 'cache,
-            {
-                use ::tree_gen::chumsky::prelude::*;
-                #body.as_node(#lang_ident::#ident)
-            }
-        }
-    }
+    let parser = quote! {       
+        use ::tree_gen::chumsky::prelude::*;
+        use tree_gen::BuilderParser;
+        #body.as_node(#lang_ident::#ident)
+    };
+    parseable_impl(parser, ident, lang_ident)
 }
