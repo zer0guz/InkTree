@@ -1,20 +1,16 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use enum_dispatch::enum_dispatch;
 use proc_macro2::TokenStream;
 use quote::quote;
-use snafu::{ResultExt, Snafu};
+use snafu::Snafu;
 use strum::IntoDiscriminant;
 use syn::{DeriveInput, Ident};
 
 use crate::{
-    attributes::{
-        AttributeError, Node, Root, StaticToken, SyntaxAttribute, SyntaxAttributeKind,
-        SyntaxProperty, Token, UnsupportedSnafu, properties::SyntaxPropertyKind,
-    },
-    error::Errors,
-    parser::{EnumError, SyntaxEnum, SyntaxVariant},
-    util::IteratorExt,
+    derive::{
+        ast::{EnumError, LanguageEnum, SyntaxVariant},
+        attributes::{Attribute, AttributeError, AttributeKind},
+    }, util::IteratorExt, Errors
 };
 
 #[derive(Debug, Snafu)]
@@ -28,7 +24,7 @@ pub enum LanguageError {
 pub struct Language {
     ident: Ident,
     root_ident: Option<Ident>,
-    pub idents: HashMap<String,Ident>,
+    pub idents: HashMap<String, Ident>,
     elements: Vec<SyntaxVariant>,
 }
 
@@ -43,19 +39,21 @@ impl Language {
     }
 
     pub fn from_input(input: DeriveInput) -> Result<Self, Errors<LanguageError>> {
-        let syntax_enum = SyntaxEnum::from_input(input).map_err(Errors::map_errors)?;
+        let syntax_enum = LanguageEnum::from_input(input).map_err(Errors::map_errors)?;
         let variants = syntax_enum.variants;
         let mut language = Self::new(syntax_enum.ident);
 
         variants
             .iter()
             .map(|variant| {
-                if variant.attribute.discriminant() == SyntaxAttributeKind::Root {
+                if variant.attribute.discriminant() == AttributeKind::Root {
                     language
                         .set_root(variant.ident.clone())
                         .map_err(Errors::from)
                 } else {
-                    language.idents.insert(variant.ident.to_string(),variant.ident.clone());
+                    language
+                        .idents
+                        .insert(variant.ident.to_string(), variant.ident.clone());
                     Ok(())
                 }
             })
@@ -98,7 +96,7 @@ impl Language {
         let code = self
             .elements
             .iter()
-            .map(|variant| Ok(variant.codegen(&self.ident,&self.idents)?))
+            .map(|variant| Ok(variant.codegen(&self.ident, &self.idents)?))
             .collect_either()?;
 
         stream.extend(code);
@@ -113,7 +111,7 @@ impl Language {
             .map(|variant| {
                 let ident = &variant.ident;
                 match variant.attribute {
-                    SyntaxAttribute::StaticToken(ref static_token) => {
+                    Attribute::StaticToken(ref static_token) => {
                         let text = &static_token.text;
                         quote! {
                             #ident => Some(#text),
@@ -174,26 +172,28 @@ impl Language {
     }
 }
 
-#[enum_dispatch]
-pub trait LanguageElement: Sized {
-    fn codegen(&self, ident: &Ident, lang_ident: &Ident,idents: &HashMap<String,Ident>) -> Result<TokenStream, AttributeError>;
-    fn verify(
-        &self,
-        properties: &Vec<SyntaxProperty>,
-        ident: &Ident,
-    ) -> Result<(), Errors<AttributeError>> {
-        properties
-            .iter()
-            .map(|prop| {
-                self.allowed()
-                    .contains(&prop.discriminant())
-                    .then_some(prop)
-                    .ok_or(syn::Error::new_spanned(ident, "todo text"))
-                    .context(UnsupportedSnafu)
-            })
-            .collect_either()?;
-
-        Ok(())
+pub fn struct_def(body: TokenStream, ident: &Ident) -> TokenStream {
+    quote! {
+        struct #ident {
+            #body
+        }
     }
-    fn allowed(&self) -> &'static [SyntaxPropertyKind];
+}
+
+pub fn parseable_impl(parser: TokenStream, ident: &Ident, lang_ident: &Ident) -> TokenStream {
+    quote! {
+        impl ::tree_gen::Parseable for #ident {
+            type Syntax = TestLang;
+
+            fn parser<'src, 'cache, 'interner, Err>()
+            -> impl ::tree_gen::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident>
+            where
+                Err: chumsky::error::Error<'src, &'src str> + 'src,
+                'cache: 'src,
+                'interner: 'cache,
+            {
+                #parser
+            }
+        }
+    }
 }

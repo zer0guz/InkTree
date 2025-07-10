@@ -6,9 +6,7 @@ use quote::quote;
 use snafu::{ResultExt, Snafu};
 use syn::{Ident, LitStr, MetaList};
 
-use crate::{
-    attributes::{parseable_impl, properties::SyntaxPropertyKind, AttributeError, SyntaxAttribute, SyntaxProperty}, language::code::struct_def, parser::{ebnf_parser, lexer, Expr, FromMeta, PathSnafu, ValueSnafu}, util::IteratorExt, Errors, LanguageElement
-};
+use crate::derive::{attributes::{AttributeError, LanguageElement}, codegen::{parseable_impl, struct_def}, parser::{dsl_lexer, dsl_parser, DslExpr, FromMeta, MetaError}, properties::PropertyKind};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -22,23 +20,23 @@ pub enum NodeError {
 
 #[derive(Debug)]
 pub struct Node {
-    pub args: Expr,
+    pub args: DslExpr,
 }
 
 impl Node {
     pub fn from_string(input: String) -> Result<Self, NodeError> {
-        let tokens = lexer().parse(input.as_str()).unwrap();
-        let args = ebnf_parser().parse(&tokens).unwrap();
+        let tokens = dsl_lexer().parse(input.as_str()).unwrap();
+        let args = dsl_parser().parse(&tokens).unwrap();
         Ok(Self { args })
     }
 
-    fn parser(expr: &Expr,idents: &HashMap<String,Ident>) -> TokenStream {
+    fn parser(expr: &DslExpr,idents: &HashMap<String,Ident>) -> TokenStream {
         match expr {
-            Expr::Just(text) => {
+            DslExpr::Just(text) => {
                 let ident = idents.get(text).unwrap();
                 quote! { #ident::parser() }
             }
-            Expr::Seq(exprs) => {
+            DslExpr::Seq(exprs) => {
                 exprs
                     .iter()
                     .map(|e| Self::parser(e,idents))
@@ -50,16 +48,16 @@ impl Node {
                         }
                     })
             }
-            Expr::Opt(inner) | Expr::Star(inner) | Expr::Plus(inner) => {
+            DslExpr::Opt(inner) | DslExpr::Star(inner) | DslExpr::Plus(inner) => {
                 let p = Self::parser(inner,idents);
                 match expr {
-                    Expr::Opt(_) => quote! { #p.or_not() },
-                    Expr::Star(_) => quote! { #p.repeated() },
-                    Expr::Plus(_) => quote! { #p.repeated().at_least(1) },
+                    &DslExpr::Opt(_) => quote! { #p.or_not() },
+                    &DslExpr::Star(_) => quote! { #p.repeated() },
+                    &DslExpr::Plus(_) => quote! { #p.repeated().at_least(1) },
                     _ => unreachable!(),
                 }
             }
-            Expr::Alt(a, b) => {
+            DslExpr::Alt(a, b) => {
                 let pa = Self::parser(a,idents);
                 let pb = Self::parser(b,idents);
                 quote! { #pa.or(#pb) }
@@ -69,14 +67,11 @@ impl Node {
 }
 
 impl FromMeta for Node {
-    fn from_list(list: &MetaList) -> Result<SyntaxAttribute, AttributeError> {
+    fn from_list(list: &MetaList) -> Result<Self, MetaError> {
         let input = list.tokens.to_string();
         Ok(Self::from_string(input)?.into())
     }
 
-    fn from_path(path: &syn::Path) -> Result<SyntaxAttribute, AttributeError> {
-        Err(syn::Error::new_spanned(path, "todo")).context(PathSnafu)?
-    }
 }
 
 impl LanguageElement for Node {
@@ -92,7 +87,7 @@ impl LanguageElement for Node {
         })
     }
 
-    fn allowed(&self) -> &'static [SyntaxPropertyKind] {
+    fn allowed(&self) -> &'static [PropertyKind] {
         &[]
     }
 }

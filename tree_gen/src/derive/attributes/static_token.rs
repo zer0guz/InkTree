@@ -5,21 +5,17 @@ use quote::quote;
 use snafu::ResultExt;
 use syn::{Ident, Lit, LitStr, MetaList};
 
-use crate::{
-    attributes::{parseable_impl, properties, SyntaxProperty}, language::{
-        attributes::{properties::SyntaxPropertyKind, AttributeError, SyntaxAttribute},
-        code::struct_def,
-    }, parser::{FromMeta, PathSnafu, ValueSnafu}, LanguageElement
-};
+use crate::derive::{attributes::{AttributeError, LanguageElement}, codegen::{parseable_impl, struct_def}, parser::{FromMeta, MetaError}, properties::PropertyKind};
 
-const ALLOWED: &[SyntaxPropertyKind] = &[];
+
+const ALLOWED: &[PropertyKind] = &[];
 
 pub struct StaticToken {
     pub text: String,
 }
 
 impl StaticToken {
-    fn from_lit(lit: &Lit) -> Result<Self, AttributeError> {
+    fn from_lit(lit: &Lit) -> Result<Self, MetaError> {
         let text = match lit {
             Lit::Str(str) => str.value(),
             Lit::ByteStr(_) => todo!("support byte str"),
@@ -30,23 +26,19 @@ impl StaticToken {
 }
 
 impl FromMeta for StaticToken {
-    fn from_list(list: &MetaList) -> Result<SyntaxAttribute, AttributeError> {
+    fn from_list(list: &MetaList) -> Result<Self, MetaError> {
         let lit: LitStr = list.parse_args()?;
         Ok(Self { text: lit.value() }.into())
     }
 
-    fn from_path(path: &syn::Path) -> Result<SyntaxAttribute, AttributeError> {
-        Err(syn::Error::new_spanned(path, "todo")).context(PathSnafu)?
-    }
 
-    fn from_name_value(name_value: &syn::MetaNameValue) -> Result<SyntaxAttribute, AttributeError> {
+    fn from_name_value(name_value: &syn::MetaNameValue) -> Result<Self, MetaError> {
         match &name_value.value {
             syn::Expr::Lit(expr_lit) => Ok(Self::from_lit(&expr_lit.lit)?.into()),
             _ => Err(syn::Error::new_spanned(
                 &name_value.value,
                 "todo better text expr type error",
-            ))
-            .context(ValueSnafu)?,
+            ))?,
         }
     }
 }
@@ -67,26 +59,10 @@ impl LanguageElement for StaticToken {
         })
     }
 
-    fn allowed(&self) -> &'static [SyntaxPropertyKind] {
+    fn allowed(&self) -> &'static [PropertyKind] {
         &[]
     }
 }
-
-// impl KwLet {
-//     const fn into_syntax() -> TestLang {
-//         return TestLang::KwLet;
-//     }
-//     pub fn parser<'src, 'cache, 'interner, Err, Tok, Sy>()
-//     -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Builder<'cache, 'interner, TestLang>>
-//     where
-//         Err: chumsky::error::Error<'src, &'src str> + 'src,
-//         'cache: 'src,
-//         'interner: 'src,
-//         'interner: 'cache,
-//     {
-//         just("let").as_static_token(TestLang::KwLet)
-//     }
-// }
 
 pub fn static_token_impl(text: &str, ident: &Ident, lang_ident: &Ident) -> TokenStream {
     let parser = quote! {

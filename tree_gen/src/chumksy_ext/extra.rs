@@ -1,6 +1,7 @@
 use chumsky::{extra::Full, inspector::Inspector};
 
-use crate::Builder;
+use crate::engine::Builder;
+
 
 pub type Input<'src> = &'src str;
 pub type GreenExtra<'cache, 'interner, Err, Sy> = Full<Err, Builder<'cache, 'interner, Sy>, ()>;

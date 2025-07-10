@@ -8,9 +8,7 @@ use chumsky::{
 use cstree::build::GreenNodeBuilder;
 
 use crate::{
-    Syntax,
-    attributes::Parseable,
-    chumksy_ext::{GreenExtra, GreenState, Input},
+    chumksy_ext::{GreenExtra, GreenState, Input}, language::{Parseable, Syntax}
 };
 
 pub trait LanguageBuilder<'cache, 'interner>: Sized

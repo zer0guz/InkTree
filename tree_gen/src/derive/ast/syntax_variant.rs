@@ -2,14 +2,13 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::{Either, Itertools};
 use proc_macro2::TokenStream;
-use quote::quote;
 use snafu::{ResultExt, Snafu};
 use syn::{Ident, Meta, Variant, punctuated::Punctuated, token::Comma};
 
 use crate::{
-    Errors, LanguageElement,
-    attributes::{AttributeError, AttributeOrProperty, SyntaxAttribute, SyntaxProperty},
-    util::{IteratorExt, transpose_errors},
+    derive::{
+        ast::AttributeOrProperty, attributes::{Attribute, AttributeError, LanguageElement}, parser::MetaError, properties::Property
+    }, util::{transpose_errors, IteratorExt}, Errors
 };
 
 #[derive(Debug, Snafu)]
@@ -26,18 +25,14 @@ pub enum VariantError {
     ))]
     Format { source: syn::Error },
 
-    #[snafu(display("Error while parsing the property {}", source))]
-    Property { source: AttributeError },
+    #[snafu(transparent)]
+    Meta { source: MetaError },
 
     #[snafu(display(
         "tree_gen() has to be called with atleast one property: expected at least one of ['static_token','node','token']"
     ))]
     Empty { source: syn::Error },
 
-    #[snafu(display(
-        "tree_gen() has to be called with atleast one property: expected at least one of ['static_token','node','token']"
-    ))]
-    Attribute { source: AttributeError },
 
     #[snafu(display(
         "tree_gen() has to be called with atleast one property: expected at least one of ['static_token','node','token']"
@@ -46,9 +41,9 @@ pub enum VariantError {
 }
 
 pub struct SyntaxVariant {
-    pub attribute: SyntaxAttribute,
+    pub attribute: Attribute,
     pub ident: Ident,
-    pub properties: Vec<SyntaxProperty>,
+    pub properties: Vec<Property>,
 }
 
 impl SyntaxVariant {
@@ -58,7 +53,7 @@ impl SyntaxVariant {
             .attrs
             .iter()
             .filter(|attr| attr.meta.path().is_ident("tree_gen"))
-            .map(|attr| -> Result<_, AttributeError> {
+            .map(|attr| -> Result<_, MetaError> {
                 let list = attr.meta.require_list()?;
                 let metas = list.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated)?;
 
@@ -67,22 +62,22 @@ impl SyntaxVariant {
             .flat_map(transpose_errors)
             .map(|meta_or_err| {
                 let res = meta_or_err.and_then(|meta| {
-                    let prop = AttributeOrProperty::from_meta(meta)?;
-                    Ok(prop)
+                    let element = AttributeOrProperty::from_meta(meta)?;
+                    Ok(element)
                 });
                 match input.fields {
                     syn::Fields::Unit => (),
                     _ => {
-                        return Err(AttributeError::from(syn::Error::new_spanned(
+                        return Err(syn::Error::new_spanned(
                             &input,
                             "only unit variants supported",
-                        )))
-                        .context(AttributeSnafu)?;
+                        ).into())
                     }
                 };
-                Ok(res.context(AttributeSnafu)?)
+                res
             })
-            .collect_either()?;
+            .collect_either()
+            .map_err(Errors::map_errors)?;
 
         let (mut attributes, properties): (Vec<_>, Vec<_>) =
             meta_elements.into_iter().partition_map(|a| match a {
@@ -106,11 +101,15 @@ impl SyntaxVariant {
         }))
     }
 
-    pub fn codegen(&self,lang_ident: &Ident,idents: &HashMap<String,Ident>) -> Result<TokenStream,AttributeError> {
-        self.attribute.codegen(&self.ident,lang_ident,idents)
+    pub fn codegen(
+        &self,
+        lang_ident: &Ident,
+        idents: &HashMap<String, Ident>,
+    ) -> Result<TokenStream, AttributeError> {
+        self.attribute.codegen(&self.ident, lang_ident, idents)
     }
 
     pub fn verify(&self) -> Result<(), Errors<AttributeError>> {
-        self.attribute.verify(&self.properties,&self.ident)
+        self.attribute.verify(&self.properties, &self.ident)
     }
 }

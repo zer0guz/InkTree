@@ -9,11 +9,9 @@ use chumsky::{
 };
 
 use crate::{
-    Builder, Syntax,
     chumksy_ext::{
-        Input,
-        extra::{GreenExtra, GreenState},
-    },
+        extra::{GreenExtra, GreenState}, Input
+    }, engine::Builder, language::Syntax
 };
 
 pub trait BuilderParser<'src, 'cache, 'interner, O, Err, Sy>:

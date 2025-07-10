@@ -2,7 +2,6 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
 
-use crate::attributes::static_token::{self, StaticToken};
 
 pub trait Syntax: cstree::Syntax + 'static {
     const ROOT: &'static Self;
@@ -16,3 +15,5 @@ pub trait Syntax: cstree::Syntax + 'static {
 
     fn into_raw(self) -> cstree::RawSyntaxKind;
 }
+
+

@@ -6,25 +6,25 @@ use regex_syntax::hir::Class;
 use snafu::{ResultExt, Snafu};
 use syn::{Ident, Lit};
 
-use crate::{
-    LanguageElement,
-    attributes::{AttributeError, parseable_impl, properties::SyntaxPropertyKind},
-    language::{
-        code::struct_def,
-        mir::{Mir, MirError},
-    },
-    parser::FromMeta,
+use crate::derive::{
+    attributes::{AttributeError, LanguageElement},
+    codegen::{parseable_impl, struct_def},
+    parser::{FromMeta, MetaError, Mir, MirError},
+    properties::PropertyKind,
 };
 
 #[derive(Debug, Snafu)]
-pub enum TokenError {
+#[snafu(display("todo text"))]
+pub struct TokenError {
+    source: syn::Error,
+    kind: TokenErrorKind,
+}
+
+#[derive(Debug, Snafu)]
+pub enum TokenErrorKind {
     #[snafu(display("todo text"))]
-    Mir {
-        #[snafu(source(true))]
-        mir: MirError,
-        #[snafu(source(false))]
-        source: syn::Error,
-    },
+    #[snafu(context(false))]
+    Mir { source: MirError },
 }
 
 #[derive(Debug)]
@@ -33,23 +33,24 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn from_lit<'src>(lit: &Lit) -> Result<Self, TokenError> {
+    pub fn from_lit<'src>(lit: &Lit) -> Result<Self, MetaError> {
         let text = match lit {
             Lit::Str(lit_str) => lit_str.value(),
             _ => todo!("token from_lit"),
         };
-        let expr = Mir::parse(text.as_str()).context(MirSnafu {
-            source: syn::Error::new_spanned(lit, "todo message"),
+        let expr = Mir::parse(text.as_str()).map_err(|err| TokenError {
+            source: syn::Error::new_spanned(lit, "todo"),
+            kind: err.into(),
         })?;
         Ok(Self { expr })
     }
     fn parser(expr: &Mir) -> TokenStream {
-        match expr {
+        let parser = match expr {
             Mir::Empty => quote! { just(()) },
             Mir::Literal(literal) => {
                 let bytes: &[u8] = literal.0.as_ref();
                 let lit = match std::str::from_utf8(bytes) {
-                    Ok(s) => Literal::string(s),     // "foo\n" style
+                    Ok(s) => Literal::string(s),           // "foo\n" style
                     Err(_) => Literal::byte_string(bytes), // b"\xC8\xC8" style
                 };
                 quote! { just(#lit) }
@@ -67,7 +68,7 @@ impl Token {
                         .collect();
 
                     quote! {
-                      ::tree_gen::ranges(&[ #(#ranges),* ])
+                      ranges(&[ #(#ranges),* ])
                     }
                 }
                 Class::Bytes(bytes) => {
@@ -82,7 +83,7 @@ impl Token {
                         .collect();
 
                     quote! {
-                      ::tree_gen::ranges(&[ #(#ranges),* ])
+                      ranges(&[ #(#ranges),* ])
                     }
                 }
             },
@@ -111,19 +112,19 @@ impl Token {
                 let parser = Self::parser(mir);
                 quote! {#parser.or_not()}
             }
-        }
+        };
+
+        quote! {#parser}
     }
 }
 
 impl FromMeta for Token {
-    fn from_list(list: &syn::MetaList) -> Result<super::SyntaxAttribute, AttributeError> {
+    fn from_list(list: &syn::MetaList) -> Result<Self, MetaError> {
         let lit: Lit = list.parse_args()?;
         Ok(Self::from_lit(&lit)?.into())
     }
 
-    fn from_name_value(
-        name_value: &syn::MetaNameValue,
-    ) -> Result<super::SyntaxAttribute, AttributeError> {
+    fn from_name_value(name_value: &syn::MetaNameValue) -> Result<Self, MetaError> {
         match &name_value.value {
             syn::Expr::Lit(expr_lit) => Ok(Self::from_lit(&expr_lit.lit)?.into()),
             _ => todo!("error"),
@@ -149,7 +150,7 @@ impl LanguageElement for Token {
         })
     }
 
-    fn allowed(&self) -> &'static [SyntaxPropertyKind] {
+    fn allowed(&self) -> &'static [PropertyKind] {
         &[]
     }
 }
@@ -158,6 +159,7 @@ pub fn token_impl(ident: &Ident, lang_ident: &Ident, body: TokenStream) -> Token
     let parser = quote! {
         use ::tree_gen::chumsky::prelude::*;
         use tree_gen::BuilderParser;
+        use tree_gen::chumksy_ext::*;
         #body.as_token(#lang_ident::#ident)
     };
     parseable_impl(parser, ident, lang_ident)

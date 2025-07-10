@@ -2,9 +2,7 @@ use snafu::{ResultExt, Snafu};
 use syn::{DeriveInput, Ident, parse::Parse};
 
 use crate::{
-    error::Errors,
-    parser::variant::{SyntaxVariant, VariantError},
-    util::IteratorExt,
+    derive::ast::{SyntaxVariant, VariantError}, error::Errors, util::IteratorExt
 };
 
 #[derive(Debug, Snafu)]
@@ -29,12 +27,12 @@ pub enum EnumError {
     Variant { source: VariantError },
 }
 
-pub struct SyntaxEnum {
+pub struct LanguageEnum {
     pub variants: Vec<SyntaxVariant>,
     pub ident: Ident,
 }
 
-impl SyntaxEnum {
+impl LanguageEnum {
     pub fn from_input(input: DeriveInput) -> Result<Self, Errors<EnumError>> {
         let correct_repr = verify_repr(&input);
 
