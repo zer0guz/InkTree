@@ -1,28 +1,31 @@
 mod node;
-mod root;
+mod pratt;
 mod static_token;
 mod token;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
+use crate::{
+    Errors,
+    derive::{
+        Language, LanguageError,
+        ast::SyntaxVariant,
+        parser::{FromMeta, MetaError},
+        properties::{Property, PropertyKind},
+    },
+    language,
+    util::IteratorExt,
+};
 use enum_dispatch::enum_dispatch;
 use proc_macro2::TokenStream;
 use snafu::{ResultExt, Snafu};
 use strum::{EnumDiscriminants, EnumString, IntoDiscriminant};
 use syn::{Ident, Meta};
-use crate::{derive::{ast::{AttributeOrProperty}, parser::{FromMeta, MetaError}, properties::{Property, PropertyKind}}, util::IteratorExt, Errors};
 
-
-
-
-
-
-pub use static_token::*;
 pub use node::*;
+pub use pratt::*;
+pub use static_token::*;
 pub use token::*;
-pub use root::*;
-
-
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(self)))]
@@ -39,38 +42,48 @@ pub enum Attribute {
     StaticToken(StaticToken),
     Node(Node),
     Token(Token),
-    Root(Root),
+    Pratt(Pratt),
+    Inline(Inline),
 }
-
 
 impl AttributeKind {
     pub fn from_meta(self, meta: &Meta) -> Result<Attribute, MetaError> {
         match self {
-            Self::StaticToken => Ok(StaticToken::from_meta(meta)?.into()),
-            Self::Root => Ok(Root::from_meta(meta)?.into()),
-            Self::Node => Ok(Node::from_meta(meta)?.into()),
-            Self::Token => Ok(Token::from_meta(meta)?.into()),
+            AttributeKind::StaticToken => Ok(StaticToken::from_meta(meta)?.into()),
+            AttributeKind::Node => Ok(Node::from_meta(meta)?.into()),
+            AttributeKind::Token => Ok(Token::from_meta(meta)?.into()),
+            AttributeKind::Pratt => Ok(Pratt::from_meta(meta)?.into()),
+            AttributeKind::Inline => Ok(Inline::from_meta(meta)?.into()),
         }
     }
 }
 
-
-
 #[enum_dispatch]
 pub trait LanguageElement: Sized {
-    fn codegen(&self, ident: &Ident, lang_ident: &Ident,idents: &HashMap<String,Ident>) -> Result<TokenStream, AttributeError>;
-    fn verify(
+    fn codegen(
         &self,
-        properties: &Vec<Property>,
-        ident: &Ident,
-    ) -> Result<(), Errors<AttributeError>> {
-        properties
+        variant: &SyntaxVariant,
+        language: &Language,
+    ) -> Result<TokenStream, AttributeError>;
+
+    fn build(
+        &self,
+        _: HashSet<Property>,
+        _: &SyntaxVariant,
+        _: &mut Language,
+    ) -> Result<(), Errors<LanguageError>> {
+        Ok(())
+    }
+
+    fn verify(&self, variant: &SyntaxVariant) -> Result<(), Errors<AttributeError>> {
+        variant
+            .properties
             .iter()
             .map(|prop| {
                 self.allowed()
                     .contains(&prop.discriminant())
                     .then_some(prop)
-                    .ok_or(syn::Error::new_spanned(ident, "todo text"))
+                    .ok_or(syn::Error::new_spanned(&variant.ident, "todo text verify"))
                     .context(UnsupportedSnafu)
             })
             .collect_either()?;
@@ -79,4 +92,3 @@ pub trait LanguageElement: Sized {
     }
     fn allowed(&self) -> &'static [PropertyKind];
 }
-

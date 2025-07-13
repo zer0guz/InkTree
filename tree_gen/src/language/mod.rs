@@ -1,6 +1,5 @@
-mod syntax;
 mod parseable;
+mod syntax;
 
-pub use syntax::Syntax;
 pub use parseable::Parseable;
-
+pub use syntax::Syntax;

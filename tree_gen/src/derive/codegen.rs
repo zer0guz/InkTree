@@ -7,25 +7,36 @@ use strum::IntoDiscriminant;
 use syn::{DeriveInput, Ident};
 
 use crate::{
+    Errors,
     derive::{
         ast::{EnumError, LanguageEnum, SyntaxVariant},
-        attributes::{Attribute, AttributeError, AttributeKind},
-    }, util::IteratorExt, Errors
+        attributes::{Attribute, AttributeError},
+        properties::{Operator, OperatorKind, PropertyKind},
+    },
+    util::IteratorExt,
 };
 
 #[derive(Debug, Snafu)]
 pub enum LanguageError {
     #[snafu(context(false))]
-    Enum { source: EnumError },
+    Enum {
+        source: EnumError,
+    },
     #[snafu(context(false))]
-    Attribute { source: AttributeError },
+    Attribute {
+        source: AttributeError,
+    },
+    Root {
+        source: syn::Error,
+    },
 }
 
 pub struct Language {
-    ident: Ident,
-    root_ident: Option<Ident>,
+    pub ident: Ident,
+    pub root_ident: Option<Ident>,
     pub idents: HashMap<String, Ident>,
-    elements: Vec<SyntaxVariant>,
+    pub elements: Vec<SyntaxVariant>,
+    pub operators: Vec<Operator>,
 }
 
 impl Language {
@@ -35,6 +46,7 @@ impl Language {
             root_ident: None,
             idents: HashMap::new(),
             elements: vec![],
+            operators: vec![],
         }
     }
 
@@ -43,42 +55,28 @@ impl Language {
         let variants = syntax_enum.variants;
         let mut language = Self::new(syntax_enum.ident);
 
-        variants
-            .iter()
-            .map(|variant| {
-                if variant.attribute.discriminant() == AttributeKind::Root {
-                    language
-                        .set_root(variant.ident.clone())
-                        .map_err(Errors::from)
-                } else {
-                    language
-                        .idents
-                        .insert(variant.ident.to_string(), variant.ident.clone());
-                    Ok(())
-                }
+        let elements = variants
+            .into_iter()
+            .map(|mut element| {
+                element
+                    .verify(&mut language)
+                    .map_err(Errors::map_errors::<LanguageError>)?;
+                element
+                    .build(&mut language)
+                    .map_err(Errors::map_errors::<LanguageError>)?;
+                Ok(element)
             })
             .collect_either_flatten()?;
-
-        language.elements = variants;
 
         if language.root_ident.is_none() {
             todo!("no root error")
         }
 
-        language
-            .elements
-            .iter()
-            .map(|variant| {
-                variant
-                    .verify()
-                    .map_err(Errors::map_errors::<LanguageError>)
-            })
-            .collect_either_flatten()?;
-
+        language.elements = elements;
         Ok(language)
     }
 
-    fn set_root(&mut self, ident: Ident) -> Result<(), LanguageError> {
+    pub fn set_root(&mut self, ident: Ident) -> Result<(), LanguageError> {
         let old = self.root_ident.replace(ident);
         if let Some(old) = old
             && let Some(new) = &self.root_ident
@@ -96,7 +94,7 @@ impl Language {
         let code = self
             .elements
             .iter()
-            .map(|variant| Ok(variant.codegen(&self.ident, &self.idents)?))
+            .map(|variant| Ok(variant.codegen(&self)?))
             .collect_either()?;
 
         stream.extend(code);
@@ -105,12 +103,12 @@ impl Language {
     }
 
     fn syntax_impl(&self) -> TokenStream {
-        let static_texts: Vec<_> = self
+        let (static_texts, parsers): (Vec<_>, Vec<_>) = self
             .elements
             .iter()
             .map(|variant| {
                 let ident = &variant.ident;
-                match variant.attribute {
+                let static_text = match variant.attribute {
                     Attribute::StaticToken(ref static_token) => {
                         let text = &static_token.text;
                         quote! {
@@ -120,7 +118,12 @@ impl Language {
                     _ => quote! {
                         #ident => None,
                     },
-                }
+                };
+                let lang_ident = &self.ident;
+                let parser = quote! {
+                    #lang_ident::#ident => #ident::parser().boxed(),
+                };
+                (static_text, parser)
             })
             .collect();
         let ident = &self.ident;
@@ -167,6 +170,25 @@ impl Language {
                         _ => unreachable!()
                     }
                 }
+
+                fn parser<'src, 'cache, 'interner, Err>(
+                    self,
+                ) -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, Self>
+                where
+                    Err: chumsky::error::Error<'src, ::tree_gen::chumksy_ext::Input<'src>> + 'src,
+                    Err: chumsky::label::LabelError<'src,&'src str,chumsky::text::TextExpected<'src,&'src str>>,
+                    Err: chumsky::label::LabelError<'src,&'src str,&'src str>,
+
+
+                    'interner: 'cache,
+                    'cache: 'src
+                {
+                    use ::tree_gen::chumsky::prelude::*;
+                    use ::tree_gen::Parseable;
+                    match self {
+                        #( #parsers )*
+                    }
+                }
             }
         }
     }
@@ -186,9 +208,13 @@ pub fn parseable_impl(parser: TokenStream, ident: &Ident, lang_ident: &Ident) ->
             type Syntax = TestLang;
 
             fn parser<'src, 'cache, 'interner, Err>()
-            -> impl ::tree_gen::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident>
+            -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident>
             where
                 Err: chumsky::error::Error<'src, &'src str> + 'src,
+                Err: chumsky::label::LabelError<'src,&'src str,chumsky::text::TextExpected<'src,&'src str>>,
+                Err: chumsky::label::LabelError<'src,&'src str,&'src str>,
+
+
                 'cache: 'src,
                 'interner: 'cache,
             {

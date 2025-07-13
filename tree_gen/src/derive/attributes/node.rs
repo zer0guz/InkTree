@@ -1,12 +1,20 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use chumsky::{Parser, prelude::just};
-use proc_macro2::{Span, TokenStream};
+use chumsky::Parser;
+use derive_more::From;
+use proc_macro2::TokenStream;
 use quote::quote;
-use snafu::{ResultExt, Snafu};
-use syn::{Ident, LitStr, MetaList};
+use snafu::Snafu;
+use syn::{Ident, MetaList};
 
-use crate::derive::{attributes::{AttributeError, LanguageElement}, codegen::{parseable_impl, struct_def}, parser::{dsl_lexer, dsl_parser, DslExpr, FromMeta, MetaError}, properties::PropertyKind};
+use crate::derive::{
+    Language,
+    ast::SyntaxVariant,
+    attributes::{AttributeError, LanguageElement},
+    codegen::{parseable_impl, struct_def},
+    parser::{DslExpr, FromMeta, MetaError, dsl_lexer, dsl_parser},
+    properties::PropertyKind,
+};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -18,19 +26,17 @@ pub enum NodeError {
     // },
 }
 
-#[derive(Debug)]
-pub struct Node {
-    pub args: DslExpr,
-}
+#[derive(Debug, From)]
+pub struct Inline(DslExpr);
 
-impl Node {
+impl Inline {
     pub fn from_string(input: String) -> Result<Self, NodeError> {
         let tokens = dsl_lexer().parse(input.as_str()).unwrap();
         let args = dsl_parser().parse(&tokens).unwrap();
-        Ok(Self { args })
+        Ok(Self(args.into()))
     }
 
-    fn parser(expr: &DslExpr,idents: &HashMap<String,Ident>) -> TokenStream {
+    pub fn parser(expr: &DslExpr, idents: &HashMap<String, Ident>) -> TokenStream {
         match expr {
             DslExpr::Just(text) => {
                 let ident = idents.get(text).unwrap();
@@ -39,7 +45,7 @@ impl Node {
             DslExpr::Seq(exprs) => {
                 exprs
                     .iter()
-                    .map(|e| Self::parser(e,idents))
+                    .map(|e| Self::parser(e, idents))
                     .fold(quote! {}, |acc, p| {
                         if acc.is_empty() {
                             p
@@ -49,7 +55,7 @@ impl Node {
                     })
             }
             DslExpr::Opt(inner) | DslExpr::Star(inner) | DslExpr::Plus(inner) => {
-                let p = Self::parser(inner,idents);
+                let p = Self::parser(inner, idents);
                 match expr {
                     &DslExpr::Opt(_) => quote! { #p.or_not() },
                     &DslExpr::Star(_) => quote! { #p.repeated() },
@@ -58,11 +64,30 @@ impl Node {
                 }
             }
             DslExpr::Alt(a, b) => {
-                let pa = Self::parser(a,idents);
-                let pb = Self::parser(b,idents);
+                let pa = Self::parser(a, idents);
+                let pb = Self::parser(b, idents);
                 quote! { #pa.or(#pb) }
             }
         }
+    }
+}
+
+#[derive(Debug, From)]
+pub struct Node(Inline);
+
+impl Node {
+    pub fn parser(&self, idents: &HashMap<String, Ident>) -> TokenStream {
+        Inline::parser(&self.0.0, idents)
+    }
+    pub fn from_string(input: String) -> Result<Self, NodeError> {
+        Ok(Inline::from_string(input)?.into())
+    }
+}
+
+impl FromMeta for Inline {
+    fn from_list(list: &MetaList) -> Result<Self, MetaError> {
+        let input = list.tokens.to_string();
+        Ok(Self::from_string(input)?.into())
     }
 }
 
@@ -71,16 +96,38 @@ impl FromMeta for Node {
         let input = list.tokens.to_string();
         Ok(Self::from_string(input)?.into())
     }
+}
 
+impl LanguageElement for Inline {
+    fn codegen(
+        &self,
+        variant: &SyntaxVariant,
+        language: &Language,
+    ) -> Result<TokenStream, AttributeError> {
+        let def_body = quote! {};
+        let def = struct_def(def_body, &variant.ident);
+        let parser = Inline::parser(&self.0, &language.idents);
+        let impl_code = node_impl(&variant.ident, &language.ident, parser, false);
+        Ok(quote! {
+            #def
+            #impl_code
+        })
+    }
+    fn allowed(&self) -> &'static [PropertyKind] {
+        &[PropertyKind::Padded, PropertyKind::PaddedBy]
+    }
 }
 
 impl LanguageElement for Node {
-    fn codegen(&self, ident: &Ident, lang_ident: &Ident,idents: &HashMap<String,Ident>) -> Result<TokenStream, AttributeError> {
+    fn codegen(
+        &self,
+        variant: &SyntaxVariant,
+        language: &Language,
+    ) -> Result<TokenStream, AttributeError> {
         let def_body = quote! {};
-        let def = struct_def(def_body, &ident);
-        let parser = Self::parser(&self.args,idents);
-        let impl_code = node_impl(ident, lang_ident, parser);
-
+        let def = struct_def(def_body, &variant.ident);
+        let parser = self.parser(&language.idents);
+        let impl_code = node_impl(&variant.ident, &language.ident, parser, true);
         Ok(quote! {
             #def
             #impl_code
@@ -88,17 +135,27 @@ impl LanguageElement for Node {
     }
 
     fn allowed(&self) -> &'static [PropertyKind] {
-        &[]
+        &[
+            PropertyKind::Root,
+            PropertyKind::Padded,
+            PropertyKind::PaddedBy,
+        ]
     }
 }
 
-
-
-pub fn node_impl(ident: &Ident, lang_ident: &Ident,body: TokenStream) -> TokenStream {
-    let parser = quote! {       
+pub fn node_impl(
+    ident: &Ident,
+    lang_ident: &Ident,
+    body: TokenStream,
+    as_node: bool,
+) -> TokenStream {
+    let mut parser = quote! {
         use ::tree_gen::chumsky::prelude::*;
-        use tree_gen::BuilderParser;
-        #body.as_node(#lang_ident::#ident)
+        use tree_gen::chumksy_ext::*;
+        #body
     };
+    if as_node {
+        parser = quote! {#parser.as_node(#lang_ident::#ident)}
+    }
     parseable_impl(parser, ident, lang_ident)
 }

@@ -35,9 +35,10 @@ enum UnOp {
 
 pub fn dsl_parser<'a>() -> impl Parser<'a, &'a [DslToken], DslExpr> {
     recursive(|expr| {
-        let atom = select! { DslToken::Ident(s) => DslExpr::Just(s.to_owned()) }.or(expr
-            .clone()
-            .delimited_by(just(DslToken::LParen), just(DslToken::RParen)))
+        let atom = select! { DslToken::Ident(s) => DslExpr::Just(s.to_owned()) }
+            .or(expr
+                .clone()
+                .delimited_by(just(DslToken::LParen), just(DslToken::RParen)))
             .boxed();
 
         let unary = atom
@@ -71,7 +72,8 @@ pub fn dsl_parser<'a>() -> impl Parser<'a, &'a [DslToken], DslExpr> {
                     v.extend(rest);
                     DslExpr::Seq(v)
                 }
-            }).boxed();
+            })
+            .boxed();
 
         seq.clone()
             .then(
@@ -90,7 +92,8 @@ pub fn dsl_parser<'a>() -> impl Parser<'a, &'a [DslToken], DslExpr> {
                     }
                     DslExpr::Alt(Box::new(first), Box::new(nested))
                 }
-            }).boxed()
+            })
+            .boxed()
     })
 }
 
@@ -113,21 +116,30 @@ mod parser_tests {
     fn test_opt() {
         let tokens = vec![id("foo"), DslToken::Question];
         let expr = dsl_parser().parse(&tokens).unwrap();
-        assert_eq!(expr, DslExpr::Opt(Box::new(DslExpr::Just("foo".to_owned()))));
+        assert_eq!(
+            expr,
+            DslExpr::Opt(Box::new(DslExpr::Just("foo".to_owned())))
+        );
     }
 
     #[test]
     fn test_star() {
         let tokens = vec![id("bar"), DslToken::Star];
         let expr = dsl_parser().parse(&tokens).unwrap();
-        assert_eq!(expr, DslExpr::Star(Box::new(DslExpr::Just("bar".to_owned()))));
+        assert_eq!(
+            expr,
+            DslExpr::Star(Box::new(DslExpr::Just("bar".to_owned())))
+        );
     }
 
     #[test]
     fn test_plus() {
         let tokens = vec![id("baz"), DslToken::Plus];
         let expr = dsl_parser().parse(&tokens).unwrap();
-        assert_eq!(expr, DslExpr::Plus(Box::new(DslExpr::Just("baz".to_owned()))));
+        assert_eq!(
+            expr,
+            DslExpr::Plus(Box::new(DslExpr::Just("baz".to_owned())))
+        );
     }
 
     #[test]
@@ -225,7 +237,10 @@ mod lexer_tests {
     fn test_parse_opt() {
         let tokens = dsl_lexer().parse("baz?").unwrap();
         let expr = dsl_parser().parse(&tokens).unwrap();
-        assert_eq!(expr, DslExpr::Opt(Box::new(DslExpr::Just("baz".to_owned()))));
+        assert_eq!(
+            expr,
+            DslExpr::Opt(Box::new(DslExpr::Just("baz".to_owned())))
+        );
     }
 
     #[test]
@@ -263,4 +278,3 @@ mod lexer_tests {
         assert_eq!(expr, DslExpr::Plus(Box::new(DslExpr::Just("n".to_owned()))));
     }
 }
-

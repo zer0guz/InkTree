@@ -15,9 +15,12 @@ where
     pub fn into_compile_errors(self) -> Vec<proc_macro2::TokenStream> {
         fn find_source(mut error: &(dyn std::error::Error + 'static)) -> TokenStream {
             while !error.is::<syn::Error>() {
-                error = error.source().unwrap()
+                error = error.source().expect("no error source")
             }
-            let span = error.downcast_ref::<syn::Error>().unwrap().span();
+            let span = error
+                .downcast_ref::<syn::Error>()
+                .expect("downcast error")
+                .span();
             syn::Error::new(span, format!("{}", error)).into_compile_error()
         }
         self.0

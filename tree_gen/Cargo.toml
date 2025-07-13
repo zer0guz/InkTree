@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-chumsky = { version = "0.10.1", features = ["extension"] }
+chumsky = { version = "0.10.1", features = ["extension", "pratt"] }
 cstree = { version = "0.12.2"}
 derive_more = { version = "2.0.1", features = ["from"] }
 enum_dispatch = "0.3.13"
@@ -12,6 +12,7 @@ itertools = "0.14.0"
 proc-macro2 = "1.0.95"
 quote = "1.0.40"
 regex-syntax = "0.8.5"
+ropey = "1.6.1"
 snafu = "0.8.6"
 strum = { version = "0.27.1", features = ["derive"] }
 syn = "2.0.101"

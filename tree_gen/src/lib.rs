@@ -1,10 +1,10 @@
 pub mod chumksy_ext;
+pub mod derive;
+pub mod engine;
 mod error;
+mod incremental;
 mod language;
 mod util;
-pub mod derive;
-mod incremental;
-pub mod engine;
 
 #[cfg(feature = "derive")]
 pub use tree_gen_derive::SyntaxGenerator;
@@ -14,5 +14,4 @@ pub use cstree;
 
 pub use error::Errors;
 
-pub use chumksy_ext::{BuilderParser};
 pub use language::*;

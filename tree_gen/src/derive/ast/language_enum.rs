@@ -2,7 +2,9 @@ use snafu::{ResultExt, Snafu};
 use syn::{DeriveInput, Ident, parse::Parse};
 
 use crate::{
-    derive::ast::{SyntaxVariant, VariantError}, error::Errors, util::IteratorExt
+    derive::ast::{SyntaxVariant, VariantError},
+    error::Errors,
+    util::IteratorExt,
 };
 
 #[derive(Debug, Snafu)]

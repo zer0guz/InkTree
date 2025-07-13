@@ -1,4 +1,7 @@
-use std::{marker::PhantomData, ops::{Range, RangeBounds}};
+use std::{
+    marker::PhantomData,
+    ops::{Range, RangeBounds},
+};
 
 use chumsky::{
     Parser,
@@ -9,9 +12,9 @@ use chumsky::{
 };
 
 use crate::{
-    chumksy_ext::{
-        extra::{GreenExtra, GreenState}, Input
-    }, engine::Builder, language::Syntax
+    chumksy_ext::extra::{GreenExtra, GreenState, Input},
+    engine::Builder,
+    language::Syntax,
 };
 
 pub trait BuilderParser<'src, 'cache, 'interner, O, Err, Sy>:
@@ -19,6 +22,8 @@ pub trait BuilderParser<'src, 'cache, 'interner, O, Err, Sy>:
 where
     Self::State: GreenState<'src, SyntaxKind = Sy>,
     Err: chumsky::error::Error<'src, &'src str> + 'src,
+    Err: chumsky::label::LabelError<'src, &'src str, chumsky::text::TextExpected<'src, &'src str>>,
+    Err: chumsky::label::LabelError<'src, &'src str, &'src str>,
     Sy: Syntax,
     'interner: 'cache,
     'cache: 'src,
@@ -28,24 +33,20 @@ where
     fn as_static_token(self, kind: Sy) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy>;
     fn as_node(self, kind: Sy) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy>;
     fn wrap_cp(
-        parser: impl Parser<
-            'src,
-            Input<'src>,
-            <Self::State as Inspector<'src, Input<'src>>>::Checkpoint,
-            GreenExtra<'cache, 'interner, Err, Sy>,
-        >,
+        self,
         kind: <Self::State as GreenState<'src>>::SyntaxKind,
-    ) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy>;
+    ) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy>
+    where
+        Self: Parser<
+                'src,
+                Input<'src>,
+                <Self::State as Inspector<'src, Input<'src>>>::Checkpoint,
+                GreenExtra<'cache, 'interner, Err, Sy>,
+            >;
+
     fn with_cp(
         self,
-    ) -> impl BuilderParser<
-        'src,
-        'cache,
-        'interner,
-        <Self::State as Inspector<'src, Input<'src>>>::Checkpoint,
-        Err,
-        Sy,
-    >;
+    ) -> impl BuilderParser<'src, 'cache, 'interner, cstree::build::Checkpoint, Err, Sy>;
 }
 
 impl<'src, 'cache, 'interner, O, P, Err, Sy> BuilderParser<'src, 'cache, 'interner, O, Err, Sy>
@@ -53,6 +54,8 @@ impl<'src, 'cache, 'interner, O, P, Err, Sy> BuilderParser<'src, 'cache, 'intern
 where
     P: chumsky::Parser<'src, &'src str, O, GreenExtra<'cache, 'interner, Err, Sy>>,
     Err: chumsky::error::Error<'src, &'src str> + 'src,
+    Err: chumsky::label::LabelError<'src, &'src str, chumsky::text::TextExpected<'src, &'src str>>,
+    Err: chumsky::label::LabelError<'src, &'src str, &'src str>,
     'interner: 'cache,
     'cache: 'src,
     Sy: Syntax,
@@ -72,22 +75,24 @@ where
     }
 
     fn as_node(self, kind: Sy) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy> {
-        Self::wrap_cp(self.with_cp(), kind)
+        with_cp::<Sy>()
+            .then(self)
+            .map(|(checkpoint, _)| checkpoint)
+            .wrap_cp(kind)
+        //self.with_cp().wrap_cp(kind)
     }
 
-    fn wrap_cp(
-        parser: impl BuilderParser<
-            'src,
-            'cache,
-            'interner,
-            <Self::State as Inspector<'src, Input<'src>>>::Checkpoint,
-            Err,
-            Sy,
-        >,
-        kind: Sy,
-    ) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy> {
-        parser.map_with(move |checkpoint, extra| {
-            let builder = extra.state();
+    fn wrap_cp(self, kind: Sy) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy>
+    where
+        Self: Parser<
+                'src,
+                Input<'src>,
+                cstree::build::Checkpoint,
+                GreenExtra<'cache, 'interner, Err, Sy>,
+            >,
+    {
+        self.map_with(move |checkpoint, extra| {
+            let builder: &mut Builder<'_, '_, _> = extra.state();
             builder.start_node_at(checkpoint, kind);
             builder.finish_node();
         })
@@ -95,47 +100,46 @@ where
 
     fn with_cp(
         self,
-    ) -> impl BuilderParser<
-        'src,
-        'cache,
-        'interner,
-        <Self::State as Inspector<'src, Input<'src>>>::Checkpoint,
-        Err,
-        Sy,
-    > {
+    ) -> impl BuilderParser<'src, 'cache, 'interner, cstree::build::Checkpoint, Err, Sy> {
         with_cp::<Sy>().then(self).map(|(checkpoint, _)| checkpoint)
     }
 }
 
-pub fn ranges<'src, 'cache, 'interner, Err, Sy,R>(
-    ranges: &[R]
+pub fn ranges<'src, 'cache, 'interner, Err, Sy, R>(
+    ranges: &[R],
 ) -> impl BuilderParser<'src, 'cache, 'interner, char, Err, Sy>
 where
     Err: chumsky::error::Error<'src, &'src str> + 'src,
+    Err: chumsky::label::LabelError<'src, &'src str, chumsky::text::TextExpected<'src, &'src str>>,
+    Err: chumsky::label::LabelError<'src, &'src str, &'src str>,
     Sy: Syntax,
     R: RangeBounds<char>,
     'interner: 'cache,
     'cache: 'src,
 {
-    any().filter(move |c| {
-        ranges.iter().any(|range| range.contains(c))
-    })
+    any().filter(move |c| ranges.iter().any(|range| range.contains(c)))
 }
 
 #[derive(Debug, Copy, Clone)]
-struct WithCp_<Sy>(PhantomData<Sy>);
+pub struct WithCp_<Sy>(PhantomData<Sy>);
 
 type WithCp<Sy> = Ext<WithCp_<Sy>>;
 
-fn with_cp<Sy>() -> WithCp<Sy> {
+pub fn with_cp<Sy>() -> WithCp<Sy> {
     Ext(WithCp_(PhantomData::<Sy>))
 }
 
 impl<'src, 'cache, 'interner, Err, Sy>
-    ExtParser<'src, Input<'src>, cstree::build::Checkpoint, GreenExtra<'cache, 'interner, Err, Sy>>
-    for WithCp_<Sy>
+    ExtParser<
+        'src,
+        Input<'src>,
+        <Builder<'cache, 'interner, Sy> as Inspector<'src, Input<'src>>>::Checkpoint,
+        GreenExtra<'cache, 'interner, Err, Sy>,
+    > for WithCp_<Sy>
 where
     Err: chumsky::error::Error<'src, &'src str> + 'src,
+    Err: chumsky::label::LabelError<'src, &'src str, chumsky::text::TextExpected<'src, &'src str>>,
+    Err: chumsky::label::LabelError<'src, &'src str, &'src str>,
     'cache: 'src,
     'interner: 'src,
     'interner: 'cache,
@@ -144,7 +148,8 @@ where
     fn parse(
         &self,
         input: &mut InputRef<'src, '_, Input<'src>, GreenExtra<'cache, 'interner, Err, Sy>>,
-    ) -> Result<cstree::build::Checkpoint, Err> {
+    ) -> Result<<Builder<'cache, 'interner, Sy> as Inspector<'src, Input<'src>>>::Checkpoint, Err>
+    {
         Ok(*input.save().inspector())
     }
 }

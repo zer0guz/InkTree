@@ -1,7 +1,5 @@
 use crate::{chumksy_ext::BuilderParser, language::Syntax};
 
-
-
 pub trait Parseable: Sized
 where
     Self::Syntax: Syntax + 'static,
@@ -12,7 +10,12 @@ where
     -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Self::Syntax>
     where
         Err: chumsky::error::Error<'src, &'src str> + 'src,
+        Err: chumsky::label::LabelError<
+                'src,
+                &'src str,
+                chumsky::text::TextExpected<'src, &'src str>,
+            >,
+        Err: chumsky::label::LabelError<'src, &'src str, &'src str>,
         'cache: 'src,
-        'interner: 'src,
         'interner: 'cache;
 }

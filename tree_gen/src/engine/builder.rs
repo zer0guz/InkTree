@@ -1,63 +1,35 @@
-use chumsky::{
-    ParseResult, Parser,
-    extra::{Full, ParserExtra},
-    input::Cursor,
-    inspector::Inspector,
-    prelude::todo,
+use chumsky::{input::Cursor, inspector::Inspector};
+use cstree::{
+    build::{GreenNodeBuilder, NodeCache},
+    green::GreenNode,
 };
-use cstree::build::GreenNodeBuilder;
 
 use crate::{
-    chumksy_ext::{GreenExtra, GreenState, Input}, language::{Parseable, Syntax}
+    chumksy_ext::{GreenState, Input},
+    language::Syntax,
 };
-
-pub trait LanguageBuilder<'cache, 'interner>: Sized
-where
-    Self::Syntax: Syntax + 'static,
-    'interner: 'cache,
-{
-    type Syntax;
-
-    fn parser<'src, Err, Tok>()
-    -> impl Parser<'src, Input<'src>, (), Full<Err, Builder<'cache, 'interner, Self::Syntax>, ()>>
-    where
-        Err: chumsky::error::Error<'src, &'src str> + 'src,
-        Tok: Parseable<Syntax = Self::Syntax>,
-        'cache: 'src,
-    {
-        Tok::parser::<Err>()
-    }
-
-    fn parse<'src, Err, Tok>(&mut self, input: Input<'src>) -> ParseResult<(), Err>
-    where
-        Err: chumsky::error::Error<'src, &'src str> + 'src,
-        Tok: Parseable<Syntax = Self::Syntax>,
-        'cache: 'src;
-}
-
-impl<'cache, 'interner, Sy> LanguageBuilder<'cache, 'interner> for Builder<'cache, 'interner, Sy>
-where
-    Sy: Syntax + 'static,
-    'interner: 'cache,
-{
-    type Syntax = Sy;
-
-    fn parse<'src, Err, Tok>(&mut self, input: Input<'src>) -> ParseResult<(), Err>
-    where
-        Err: chumsky::error::Error<'src, &'src str> + 'src,
-        Tok: Parseable<Syntax = Self::Syntax>,
-        'cache: 'src,
-    {
-        Self::parser::<Err, Tok>().parse_with_state(input, self)
-    }
-}
 
 pub struct Builder<'cache, 'interner, Sy>
 where
     Sy: Syntax,
     'interner: 'cache,
 {
-    builder: GreenNodeBuilder<'cache, 'interner, Sy>,
+    pub builder: GreenNodeBuilder<'cache, 'interner, Sy>,
+}
+
+impl<'cache, 'interner, Sy> Builder<'cache, 'interner, Sy>
+where
+    Sy: Syntax,
+{
+    pub fn with_cache(cache: &'cache mut NodeCache<'interner>) -> Self {
+        Builder::<'cache, 'interner> {
+            builder: GreenNodeBuilder::<'cache, 'interner>::with_cache(cache),
+        }
+    }
+
+    pub fn finish(self) -> (GreenNode, Option<NodeCache<'interner>>) {
+        self.builder.finish()
+    }
 }
 
 impl<'cache, 'interner, Sy> Default for Builder<'static, 'static, Sy>

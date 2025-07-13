@@ -9,7 +9,6 @@ use crate::derive::{
     properties::{Property, PropertyError, PropertyKind},
 };
 
-
 pub enum AttributeOrProperty {
     Attribute(Attribute),
     Property(Property),
@@ -18,9 +17,11 @@ pub enum AttributeOrProperty {
 impl AttributeOrProperty {
     pub fn from_meta(meta: Meta) -> Result<Self, MetaError> {
         let Some(ident) = meta.path().get_ident() else {
-            return Err(
-                syn::Error::new_spanned(meta.path(), "Path is not an identifier TODO text").into(),
+            return Err(syn::Error::new_spanned(
+                meta.path(),
+                "Path is not an identifier TODO text",
             )
+            .into());
         };
 
         if let Ok(kind) = AttributeKind::from_str(&ident.to_string().as_str()) {

@@ -1,20 +1,49 @@
 use snafu::{ResultExt, Snafu};
 use syn::{Meta, MetaList, MetaNameValue, Path};
 
-use crate::derive::attributes::{Attribute, AttributeError, NodeError, TokenError};
+use crate::{
+    Errors,
+    derive::attributes::{Attribute, AttributeError, NodeError, TokenError},
+};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 pub enum MetaError {
-    #[snafu(transparent)]
-    Meta { source: syn::Error },
-    #[snafu(transparent)]
-    Node { source: NodeError },
-    #[snafu(transparent)]
-    Token { source: TokenError },
+    #[snafu(context(false))]
+    Meta {
+        source: syn::Error,
+    },
+    #[snafu(context(false))]
+    Node {
+        source: NodeError,
+    },
+    #[snafu(context(false))]
+    Token {
+        source: TokenError,
+    },
 
     #[snafu(display("list not supported for this property todo"))]
-    Attribute { source: AttributeError },
+    Attribute {
+        source: AttributeError,
+    },
+
+    #[snafu(display("path not ident property todo"))]
+    PathNotIdent {
+        source: syn::Error,
+    },
+
+    #[snafu(display("argument from_str todo"))]
+    FromStr {
+        source: syn::Error,
+    },
+
+    Arguments {
+        source: Errors<syn::Error>,
+    },
+
+    ArgumentNumber {
+        source: syn::Error,
+    },
 }
 
 pub trait FromMeta: Sized {

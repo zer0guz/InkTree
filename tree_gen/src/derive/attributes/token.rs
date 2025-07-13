@@ -7,6 +7,8 @@ use snafu::{ResultExt, Snafu};
 use syn::{Ident, Lit};
 
 use crate::derive::{
+    Language,
+    ast::SyntaxVariant,
     attributes::{AttributeError, LanguageElement},
     codegen::{parseable_impl, struct_def},
     parser::{FromMeta, MetaError, Mir, MirError},
@@ -135,14 +137,13 @@ impl FromMeta for Token {
 impl LanguageElement for Token {
     fn codegen(
         &self,
-        ident: &Ident,
-        lang_ident: &Ident,
-        _: &HashMap<String, Ident>,
+        variant: &SyntaxVariant,
+        language: &Language,
     ) -> Result<TokenStream, AttributeError> {
         let def_body = quote! {};
-        let def = struct_def(def_body, &ident);
+        let def = struct_def(def_body, &variant.ident);
         let parser = Self::parser(&self.expr);
-        let impl_code = token_impl(ident, lang_ident, parser);
+        let impl_code = token_impl(&variant.ident, &language.ident, parser);
 
         Ok(quote! {
             #def
@@ -151,14 +152,13 @@ impl LanguageElement for Token {
     }
 
     fn allowed(&self) -> &'static [PropertyKind] {
-        &[]
+        &[PropertyKind::Padded, PropertyKind::PaddedBy]
     }
 }
 
 pub fn token_impl(ident: &Ident, lang_ident: &Ident, body: TokenStream) -> TokenStream {
     let parser = quote! {
         use ::tree_gen::chumsky::prelude::*;
-        use tree_gen::BuilderParser;
         use tree_gen::chumksy_ext::*;
         #body.as_token(#lang_ident::#ident)
     };

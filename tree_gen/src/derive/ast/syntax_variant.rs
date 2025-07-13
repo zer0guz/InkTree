@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::HashSet, mem};
 
 use itertools::{Either, Itertools};
 use proc_macro2::TokenStream;
@@ -6,9 +6,15 @@ use snafu::{ResultExt, Snafu};
 use syn::{Ident, Meta, Variant, punctuated::Punctuated, token::Comma};
 
 use crate::{
+    Errors,
     derive::{
-        ast::AttributeOrProperty, attributes::{Attribute, AttributeError, LanguageElement}, parser::MetaError, properties::Property
-    }, util::{transpose_errors, IteratorExt}, Errors
+        Language, LanguageError,
+        ast::AttributeOrProperty,
+        attributes::{Attribute, AttributeError, LanguageElement},
+        parser::MetaError,
+        properties::{Property, Root},
+    },
+    util::{IteratorExt, transpose_errors},
 };
 
 #[derive(Debug, Snafu)]
@@ -33,7 +39,6 @@ pub enum VariantError {
     ))]
     Empty { source: syn::Error },
 
-
     #[snafu(display(
         "tree_gen() has to be called with atleast one property: expected at least one of ['static_token','node','token']"
     ))]
@@ -43,7 +48,7 @@ pub enum VariantError {
 pub struct SyntaxVariant {
     pub attribute: Attribute,
     pub ident: Ident,
-    pub properties: Vec<Property>,
+    pub properties: HashSet<Property>,
 }
 
 impl SyntaxVariant {
@@ -71,7 +76,8 @@ impl SyntaxVariant {
                         return Err(syn::Error::new_spanned(
                             &input,
                             "only unit variants supported",
-                        ).into())
+                        )
+                        .into());
                     }
                 };
                 res
@@ -97,19 +103,28 @@ impl SyntaxVariant {
         Ok(Some(Self {
             ident: input.ident,
             attribute,
-            properties,
+            properties: properties.into_iter().collect(),
         }))
     }
 
-    pub fn codegen(
-        &self,
-        lang_ident: &Ident,
-        idents: &HashMap<String, Ident>,
-    ) -> Result<TokenStream, AttributeError> {
-        self.attribute.codegen(&self.ident, lang_ident, idents)
+    pub fn codegen(&self, language: &Language) -> Result<TokenStream, AttributeError> {
+        self.attribute.codegen(&self, language)
     }
 
-    pub fn verify(&self) -> Result<(), Errors<AttributeError>> {
-        self.attribute.verify(&self.properties, &self.ident)
+    pub fn verify(&self, language: &mut Language) -> Result<(), Errors<LanguageError>> {
+        language
+            .idents
+            .insert(self.ident.to_string(), self.ident.clone());
+        if self.properties.contains(&Property::Root(Root)) {
+            language
+                .set_root(self.ident.clone())
+                .map_err(Errors::from)?;
+        };
+        self.attribute.verify(&self).map_err(Errors::map_errors)?;
+        Ok(())
+    }
+    pub fn build(&mut self, language: &mut Language) -> Result<(), Errors<LanguageError>> {
+        self.attribute
+            .build(mem::take(&mut self.properties), &self, language)
     }
 }
