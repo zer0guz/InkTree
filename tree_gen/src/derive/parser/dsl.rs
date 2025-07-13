@@ -1,7 +1,5 @@
-use std::collections::HashSet;
 
 use chumsky::extra::Err;
-use syn::Ident;
 
 use crate::chumsky::prelude::*;
 

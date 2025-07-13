@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use proc_macro2::TokenStream;
 use quote::quote;
 use snafu::Snafu;
-use strum::IntoDiscriminant;
 use syn::{DeriveInput, Ident};
 
 use crate::{
@@ -11,7 +10,7 @@ use crate::{
     derive::{
         ast::{EnumError, LanguageEnum, SyntaxVariant},
         attributes::{Attribute, AttributeError},
-        properties::{Operator, OperatorKind, PropertyKind},
+        properties::Operator,
     },
     util::IteratorExt,
 };
@@ -78,8 +77,8 @@ impl Language {
 
     pub fn set_root(&mut self, ident: Ident) -> Result<(), LanguageError> {
         let old = self.root_ident.replace(ident);
-        if let Some(old) = old
-            && let Some(new) = &self.root_ident
+        if let Some(_) = old
+            && let Some(_) = &self.root_ident
         {
             todo!("root error")
         }

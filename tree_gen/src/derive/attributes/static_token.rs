@@ -1,4 +1,4 @@
-use std::{collections::HashSet, mem};
+use std::{collections::HashSet};
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -12,7 +12,7 @@ use crate::{
         attributes::{AttributeError, LanguageElement},
         codegen::{parseable_impl, struct_def},
         parser::{FromMeta, MetaError},
-        properties::{self, Operator, Property, PropertyKind},
+        properties::{Operator, Property, PropertyKind},
     },
 };
 

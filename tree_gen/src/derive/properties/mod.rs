@@ -5,7 +5,6 @@ mod root;
 
 use derive_more::From;
 use keyword::Keyword;
-use snafu::Snafu;
 use strum::{EnumDiscriminants, EnumString, EnumTryAs};
 use syn::Meta;
 
@@ -14,16 +13,10 @@ pub use padding::*;
 pub use root::*;
 
 use crate::derive::{
-    attributes::StaticToken,
     parser::{FromMeta, MetaError},
     properties::operator::{Infix, Postfix, Prefix},
 };
 
-#[derive(Debug, Snafu)]
-pub enum PropertyError {
-    #[snafu(transparent)]
-    Meta { source: MetaError },
-}
 
 #[derive(Debug, PartialEq, Eq, Hash, EnumDiscriminants, From, EnumTryAs)]
 #[strum_discriminants(vis(pub), strum(serialize_all = "snake_case"))]

@@ -4,7 +4,7 @@ use crate::derive::parser::{FromMeta, MetaError};
 pub struct Root;
 
 impl FromMeta for Root {
-    fn from_path(path: &syn::Path) -> Result<Self, MetaError> {
+    fn from_path(_: &syn::Path) -> Result<Self, MetaError> {
         Ok(Self.into())
     }
 }

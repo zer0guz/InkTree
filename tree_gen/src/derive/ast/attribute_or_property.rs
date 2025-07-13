@@ -1,12 +1,11 @@
 use std::str::FromStr;
 
-use snafu::{OptionExt, ResultExt, Snafu};
 use syn::Meta;
 
 use crate::derive::{
-    attributes::{Attribute, AttributeError, AttributeKind},
+    attributes::{Attribute, AttributeKind},
     parser::MetaError,
-    properties::{Property, PropertyError, PropertyKind},
+    properties::{Property, PropertyKind},
 };
 
 pub enum AttributeOrProperty {

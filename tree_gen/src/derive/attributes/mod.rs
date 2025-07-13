@@ -3,7 +3,7 @@ mod pratt;
 mod static_token;
 mod token;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use crate::{
     Errors,
@@ -13,14 +13,13 @@ use crate::{
         parser::{FromMeta, MetaError},
         properties::{Property, PropertyKind},
     },
-    language,
     util::IteratorExt,
 };
 use enum_dispatch::enum_dispatch;
 use proc_macro2::TokenStream;
 use snafu::{ResultExt, Snafu};
 use strum::{EnumDiscriminants, EnumString, IntoDiscriminant};
-use syn::{Ident, Meta};
+use syn::Meta;
 
 pub use node::*;
 pub use pratt::*;

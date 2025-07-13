@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use proc_macro2::TokenStream;
-use snafu::{AsErrorSource, Snafu};
+use snafu::{AsErrorSource};
 
 #[derive(Debug)]
 pub struct Errors<E>(pub Vec<E>)

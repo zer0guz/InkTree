@@ -4,7 +4,7 @@ use crate::derive::parser::FromMeta;
 pub struct Keyword {}
 
 impl FromMeta for Keyword {
-    fn from_path(path: &syn::Path) -> Result<Self, crate::derive::parser::MetaError> {
+    fn from_path(_: &syn::Path) -> Result<Self, crate::derive::parser::MetaError> {
         Ok(Keyword {})
     }
 }

@@ -4,7 +4,7 @@ use crate::derive::parser::FromMeta;
 pub struct Padded {}
 
 impl FromMeta for Padded {
-    fn from_path(path: &syn::Path) -> Result<Self, crate::derive::parser::MetaError> {
+    fn from_path(_: &syn::Path) -> Result<Self, crate::derive::parser::MetaError> {
         Ok(Padded {})
     }
 }
@@ -13,7 +13,7 @@ impl FromMeta for Padded {
 pub struct PaddedBy {}
 
 impl FromMeta for PaddedBy {
-    fn from_path(path: &syn::Path) -> Result<Self, crate::derive::parser::MetaError> {
+    fn from_path(_: &syn::Path) -> Result<Self, crate::derive::parser::MetaError> {
         Ok(PaddedBy {})
     }
 }

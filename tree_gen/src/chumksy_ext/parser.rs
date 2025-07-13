@@ -1,6 +1,6 @@
 use std::{
     marker::PhantomData,
-    ops::{Range, RangeBounds},
+    ops::{RangeBounds},
 };
 
 use chumsky::{

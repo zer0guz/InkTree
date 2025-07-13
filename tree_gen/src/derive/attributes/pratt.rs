@@ -1,32 +1,19 @@
-use chumsky::{Parser, prelude::any};
 use proc_macro2::TokenStream;
 use quote::quote;
-use snafu::Snafu;
 use syn::{Ident, MetaList};
 
 use crate::derive::{
     Language,
     ast::SyntaxVariant,
-    attributes::{AttributeError, Inline, LanguageElement, Node},
+    attributes::{AttributeError, LanguageElement, Node},
     codegen::{parseable_impl, struct_def},
     parser::{FromMeta, MetaError},
-    properties::{OperatorKind, PrattOperator, PropertyKind},
+    properties::PropertyKind,
 };
-
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub(crate)))]
-pub enum PrattError {
-    // #[snafu(display("todo"))]
-    // PathNotIdent {
-    //     #[snafu(source(false))]
-    //     source: syn::Error,
-    // },
-}
 
 #[derive(Debug)]
 pub struct Pratt {
     pub node: Node,
-    operators: Vec<OperatorKind>,
 }
 
 impl FromMeta for Pratt {
@@ -35,7 +22,6 @@ impl FromMeta for Pratt {
         let node = Node::from_string(input)?;
         Ok(Self {
             node,
-            operators: vec![],
         })
     }
 }

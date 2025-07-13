@@ -1,10 +1,8 @@
-use std::{hash::Hasher, mem::discriminant, ops::Deref};
+use std::{hash::Hasher, mem::discriminant};
 
-use chumsky::{
-    extra,
-    pratt::{Associativity, prefix},
-    prelude::todo,
-};
+use chumsky::
+    pratt::Associativity
+;
 use derive_more::From;
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
@@ -84,10 +82,10 @@ impl PrattOperator for Infix {
         }};
         let assoc = match self.0 {
             Associativity::Left(prec) => {
-                quote! {::tree_gen::chumsky::pratt::Associativity::Left(12)}
+                quote! {::tree_gen::chumsky::pratt::Associativity::Left(#prec)}
             }
             Associativity::Right(prec) => {
-                quote! {::tree_gen::chumsky::pratt::Associativity::Right(12)}
+                quote! {::tree_gen::chumsky::pratt::Associativity::Right(#prec)}
             }
         };
 

@@ -1,9 +1,8 @@
-use std::collections::HashMap;
 
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
 use regex_syntax::hir::Class;
-use snafu::{ResultExt, Snafu};
+use snafu::Snafu;
 use syn::{Ident, Lit};
 
 use crate::derive::{
