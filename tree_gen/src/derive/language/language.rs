@@ -1,10 +1,9 @@
-use crate::derive::language::element::LanguageElement;
-use std::
-    collections::{HashMap, hash_map::Entry}
-;
+use crate::derive::{attributes::SyntaxAttributeKind, language::element::LanguageElement};
+use std::collections::{HashMap, hash_map::Entry};
 
 use proc_macro2::TokenStream;
 use snafu::{ResultExt, Snafu};
+use strum::IntoDiscriminant;
 use syn::{DeriveInput, Ident, parse::Parse};
 
 use quote::quote;
@@ -12,7 +11,7 @@ use quote::quote;
 use crate::{
     derive::{
         attributes::SyntaxAttribute,
-        language::{ElementError, Element},
+        language::{Element, ElementError},
         properties::Operator,
     },
     error::Errors,
@@ -104,9 +103,7 @@ impl Language {
             .collect_either_flatten_into()?
             .into_iter()
             .flatten()
-            .map(|element| {
-                language.handle_element(element)
-            })
+            .map(|element| language.handle_element(element))
             .collect_either_flatten()?;
 
         Ok(language)
@@ -163,6 +160,7 @@ impl Language {
         let (static_texts, parsers): (Vec<_>, Vec<_>) = self
             .elements
             .iter()
+            .filter(|element| element.attribute.discriminant() != SyntaxAttributeKind::Rule)
             .map(|variant| {
                 let ident = &variant.attribute.name();
                 let static_text = match variant.attribute {

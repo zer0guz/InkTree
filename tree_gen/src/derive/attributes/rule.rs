@@ -21,7 +21,6 @@ use crate::{
     language::{ElementError, Language, LanguageElement},
 };
 
-
 #[derive(Debug, From)]
 pub struct Rule {
     pub dsl: DslExpr,
@@ -36,6 +35,26 @@ impl Rule {
             use ::tree_gen::chumsky::prelude::*;
             use tree_gen::chumksy_ext::*;
             #body
+        }
+    }
+
+    fn parser(&self, language: &Language) -> TokenStream {
+        let lang_ident = &language.ident;
+        let name = &self.name;
+        let body = self.parser_body(language);
+        quote! {
+            impl #name {
+                fn parser<'src, 'cache, 'interner, Err>()
+                -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident>
+                where
+                    Err: chumsky::error::Error<'src, &'src str> + 'src,
+
+                    'cache: 'src,
+                    'interner: 'cache,
+                {
+                    #body
+                }
+            }
         }
     }
 }
@@ -59,9 +78,7 @@ impl Parse for Rule {
                 content.parse_terminated(Ident::parse, Token![,])?;
             params
                 .into_iter()
-                .map(|ident| {
-                    (ident.to_string(), ident)
-                })
+                .map(|ident| (ident.to_string(), ident))
                 .collect()
         } else {
             HashMap::new()
@@ -95,11 +112,11 @@ impl LanguageElement for Rule {
         let def_body = quote! {};
         let def = struct_def(def_body, &self.name);
 
-        let impl_code = self.parser_body(&language);
+        let parser = self.parser(&language);
 
         Ok(quote! {
             #def
-            #impl_code
+            #parser
         })
     }
     fn allowed(&self) -> &'static [PropertyKind] {
