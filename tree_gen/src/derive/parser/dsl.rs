@@ -36,26 +36,34 @@ enum UnOp {
 }
 
 impl DslExpr {
-    pub fn parser(&self, idents: &HashMap<String, Ident>) -> TokenStream {
+    pub fn parser(
+        &self,
+        idents: &HashMap<String, Ident>,
+        parameters: &HashMap<String, Ident>,
+    ) -> TokenStream {
         match self {
             DslExpr::Just(text) => {
-                let ident = idents.get(text).expect("todo hashmap get");
+                let ident = if let Some(ident) = idents.get(text) {
+                    ident
+                } else if let Some(ident) = parameters.get(text) {
+                    ident
+                } else {
+                    todo!("asbdashud")
+                };
                 quote! { #ident::parser() }
             }
-            DslExpr::Seq(exprs) => {
-                exprs
-                    .iter()
-                    .map(|e| Self::parser(e, idents))
-                    .fold(quote! {}, |acc, p| {
-                        if acc.is_empty() {
-                            p
-                        } else {
-                            quote! { #acc.then(#p) }
-                        }
-                    })
-            }
+            DslExpr::Seq(exprs) => exprs
+                .iter()
+                .map(|e| Self::parser(e, idents, parameters))
+                .fold(quote! {}, |acc, p| {
+                    if acc.is_empty() {
+                        p
+                    } else {
+                        quote! { #acc.then(#p) }
+                    }
+                }),
             DslExpr::Opt(inner) | DslExpr::Star(inner) | DslExpr::Plus(inner) => {
-                let p = Self::parser(inner, idents);
+                let p = Self::parser(inner, idents, parameters);
                 match self {
                     &DslExpr::Opt(_) => quote! { #p.or_not() },
                     &DslExpr::Star(_) => quote! { #p.repeated() },
@@ -64,8 +72,8 @@ impl DslExpr {
                 }
             }
             DslExpr::Alt(a, b) => {
-                let pa = Self::parser(a, idents);
-                let pb = Self::parser(b, idents);
+                let pa = Self::parser(a, idents, parameters);
+                let pb = Self::parser(b, idents, parameters);
                 quote! { #pa.or(#pb) }
             }
         }

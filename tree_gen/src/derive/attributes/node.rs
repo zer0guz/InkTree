@@ -1,4 +1,6 @@
 
+use std::collections::HashMap;
+
 use chumsky::Parser;
 use derive_more::From;
 use proc_macro2::TokenStream;
@@ -20,7 +22,7 @@ impl Node {
     pub fn from_string(input: String, name: &Ident) -> Result<Self, syn::Error> {
         let tokens = dsl_lexer().parse(&input).into_result().expect("lexer error todo");
         let dsl = dsl_parser().parse(&tokens).into_result().expect("parser error todo").into();
-        Ok(Self(Rule::new(dsl, name.clone(), vec![])))
+        Ok(Self(Rule{dsl,name: name.clone(), parameters: HashMap::new()}))
     }
 
     pub fn parser(&self, language: &Language) -> TokenStream {

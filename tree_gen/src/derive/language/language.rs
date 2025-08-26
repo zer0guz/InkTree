@@ -1,4 +1,4 @@
-use crate::derive::language::language_element::LanguageElement;
+use crate::derive::language::element::LanguageElement;
 use std::
     collections::{HashMap, hash_map::Entry}
 ;
@@ -12,7 +12,7 @@ use quote::quote;
 use crate::{
     derive::{
         attributes::SyntaxAttribute,
-        language::{ElementError, SyntaxElement},
+        language::{ElementError, Element},
         properties::Operator,
     },
     error::Errors,
@@ -45,7 +45,7 @@ pub enum LanguageError {
 }
 
 pub struct Language {
-    pub elements: Vec<SyntaxElement>,
+    pub elements: Vec<Element>,
     pub ident: Ident,
     pub operators: Vec<Operator>,
     pub root_idents: Vec<Ident>,
@@ -75,7 +75,7 @@ impl Language {
             })
             .map(|attribute| {
                 language.handle_element(
-                    SyntaxElement::from_attribute(&attribute).map_err(LanguageError::from)?,
+                    Element::from_attribute(&attribute).map_err(LanguageError::from)?,
                 )
             })
             .collect_either_flatten()?;
@@ -100,17 +100,19 @@ impl Language {
         syntax
             .variants
             .iter()
-            .map(SyntaxElement::from_variant)
+            .map(Element::from_variant)
             .collect_either_flatten_into()?
             .into_iter()
             .flatten()
-            .map(|element| language.handle_element(element))
+            .map(|element| {
+                language.handle_element(element)
+            })
             .collect_either_flatten()?;
 
         Ok(language)
     }
 
-    fn handle_element(&mut self, element: SyntaxElement) -> Result<(), Errors<LanguageError>> {
+    fn handle_element(&mut self, element: Element) -> Result<(), Errors<LanguageError>> {
         let name = element.attribute.name();
 
         match self.idents.entry(name.to_string()) {

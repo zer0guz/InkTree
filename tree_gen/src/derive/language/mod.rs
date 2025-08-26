@@ -1,5 +1,5 @@
 mod language;
-mod language_element;
+mod element;
 mod parseable;
 mod syntax;
 
@@ -8,4 +8,4 @@ pub use syntax::Syntax;
 
 
 pub use language::{*};
-pub(crate) use language_element::{*};
+pub(crate) use element::{*};

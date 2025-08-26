@@ -33,12 +33,12 @@ pub enum ElementError {
     Unsupported { source: syn::Error },
 }
 
-pub struct SyntaxElement {
+pub struct Element {
     pub attribute: SyntaxAttribute,
     pub properties: Vec<Property>,
 }
 
-impl SyntaxElement {
+impl Element {
     pub fn from_variant(variant: &Variant) -> Result<Option<Self>, Errors<ElementError>> {
         match variant.fields {
             syn::Fields::Unit => (),
@@ -97,10 +97,10 @@ impl SyntaxElement {
             .context(FormatSnafu)?
             .parse_args()
             .context(FormatSnafu)?;
-        // let dsl = list.tokens.to_string();
+
         let attribute = SyntaxAttribute::from_meta(&inner.into(), None)?;
 
-        Ok(SyntaxElement {
+        Ok(Element {
             attribute,
             properties: vec![],
         })
