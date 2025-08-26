@@ -1,8 +1,6 @@
 use std::{hash::Hasher, mem::discriminant};
 
-use chumsky::
-    pratt::Associativity
-;
+use chumsky::pratt::Associativity;
 use derive_more::From;
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
@@ -10,7 +8,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Expr, Ident, Lit, LitInt, MetaList, punctuated::Punctuated, token::Comma};
 
-use crate::derive::parser::{FromMeta, MetaError};
+use crate::{derive::parser::FromMeta, language::ElementError};
 
 #[derive(Debug, PartialEq, Eq)]
 #[enum_dispatch(PrattOperator)]
@@ -39,10 +37,10 @@ pub trait PrattOperator {
     fn pratt(&self, parser: TokenStream, ident: &Ident, lang_ident: &Ident) -> TokenStream;
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, From)]
+#[derive(Debug, PartialEq, Eq, Hash, From, Clone, Copy)]
 pub struct Prefix(u16);
 
-#[derive(Debug, PartialEq, Eq, From)]
+#[derive(Debug, PartialEq, Eq, From, Clone, Copy)]
 pub struct Infix(Associativity);
 
 impl std::hash::Hash for Infix {
@@ -56,7 +54,7 @@ impl std::hash::Hash for Infix {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Postfix(u16);
 
 impl PrattOperator for Prefix {
@@ -107,26 +105,26 @@ impl PrattOperator for Postfix {
 }
 
 impl Prefix {
-    fn from_lit_int(lit: LitInt) -> Result<Self, MetaError> {
+    fn from_lit_int(lit: LitInt) -> Result<Self, ElementError> {
         Ok(Self(lit.base10_parse::<u16>()?.into()))
     }
 }
 
 impl Postfix {
-    fn from_lit_int(lit: LitInt) -> Result<Self, MetaError> {
+    fn from_lit_int(lit: LitInt) -> Result<Self, ElementError> {
         Ok(Self(lit.base10_parse::<u16>()?.into()))
     }
 }
 
 impl FromMeta for Prefix {
-    fn from_list(list: &MetaList) -> Result<Self, MetaError> {
+    fn from_list(list: &MetaList,_name: Option<&Ident>) -> Result<Self, ElementError> {
         let lit: LitInt = list.parse_args()?;
 
         Ok(Self::from_lit_int(lit)?.into())
     }
 }
 impl FromMeta for Postfix {
-    fn from_list(list: &MetaList) -> Result<Self, MetaError> {
+    fn from_list(list: &MetaList,_name: Option<&Ident>) -> Result<Self, ElementError> {
         let lit: LitInt = list.parse_args()?;
 
         Ok(Self::from_lit_int(lit)?.into())
@@ -134,7 +132,7 @@ impl FromMeta for Postfix {
 }
 
 impl FromMeta for Infix {
-    fn from_list(list: &MetaList) -> Result<Self, MetaError> {
+    fn from_list(list: &MetaList,_name: Option<&Ident>) -> Result<Self, ElementError> {
         if let Some((assoc, prec)) = list
             .parse_args_with(Punctuated::<Expr, Comma>::parse_terminated)?
             .into_iter()

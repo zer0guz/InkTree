@@ -1,4 +1,3 @@
-
 use crate::chumksy_ext::{BuilderParser, Input};
 
 pub trait Syntax: cstree::Syntax + 'static {
@@ -27,3 +26,4 @@ pub trait Syntax: cstree::Syntax + 'static {
         'interner: 'cache,
         'cache: 'src;
 }
+

@@ -1,46 +1,26 @@
-use snafu::Snafu;
-use syn::{Meta, MetaList, MetaNameValue, Path};
+use snafu::ResultExt;
+use syn::{Ident, Meta, MetaList, MetaNameValue, Path};
 
-use crate::
-    derive::attributes::{NodeError, TokenError}
-;
+use crate::language::{ElementError, MetaSnafu};
 
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub(crate)))]
-pub enum MetaError {
-    #[snafu(context(false))]
-    Meta {
-        source: syn::Error,
-    },
-    
-    #[snafu(context(false))]
-    Node {
-        source: NodeError,
-    },
-
-    #[snafu(context(false))]
-    Token {
-        source: TokenError,
-    },
-}
 
 pub trait FromMeta: Sized {
-    fn from_meta(meta: &Meta) -> Result<Self, MetaError> {
+    fn from_meta(meta: &Meta,name: Option<&Ident>) -> Result<Self, ElementError> {
         match meta {
-            Meta::Path(path) => Self::from_path(path),
-            Meta::List(meta_list) => Self::from_list(meta_list),
-            Meta::NameValue(meta_name_value) => Self::from_name_value(meta_name_value),
+            Meta::Path(path) => Self::from_path(path,name),
+            Meta::List(meta_list) => Self::from_list(meta_list,name),
+            Meta::NameValue(meta_name_value) => Self::from_name_value(meta_name_value,name),
         }
     }
 
-    fn from_list(list: &MetaList) -> Result<Self, MetaError> {
-        Err(syn::Error::new_spanned(list, "todo"))?
+    fn from_list(list: &MetaList,_: Option<&Ident>) -> Result<Self, ElementError> {
+        Err(syn::Error::new_spanned(list, "from_meta list not supported for this thing todo")).context(MetaSnafu)?
     }
 
-    fn from_path(path: &Path) -> Result<Self, MetaError> {
-        Err(syn::Error::new_spanned(path, "todo"))?
+    fn from_path(path: &Path,_: Option<&Ident>) -> Result<Self, ElementError> {
+        Err(syn::Error::new_spanned(path, "from_meta path not supported for this thing todo")).context(MetaSnafu)?
     }
-    fn from_name_value(name_value: &MetaNameValue) -> Result<Self, MetaError> {
-        Err(syn::Error::new_spanned(name_value, "todo"))?
+    fn from_name_value(name_value: &MetaNameValue,_: Option<&Ident>) -> Result<Self, ElementError> {
+        Err(syn::Error::new_spanned(name_value, "from_meta name_value not supported for this thing todo")).context(MetaSnafu)?
     }
 }

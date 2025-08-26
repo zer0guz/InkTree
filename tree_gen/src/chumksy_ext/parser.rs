@@ -1,7 +1,4 @@
-use std::{
-    marker::PhantomData,
-    ops::{RangeBounds},
-};
+use std::{marker::PhantomData, ops::RangeBounds};
 
 use chumsky::{
     Parser,
@@ -13,8 +10,7 @@ use chumsky::{
 
 use crate::{
     chumksy_ext::extra::{GreenExtra, GreenState, Input},
-    engine::Builder,
-    language::Syntax,
+    engine::Builder, language::Syntax,
 };
 
 pub trait BuilderParser<'src, 'cache, 'interner, O, Err, Sy>:
@@ -22,8 +18,6 @@ pub trait BuilderParser<'src, 'cache, 'interner, O, Err, Sy>:
 where
     Self::State: GreenState<'src, SyntaxKind = Sy>,
     Err: chumsky::error::Error<'src, &'src str> + 'src,
-    Err: chumsky::label::LabelError<'src, &'src str, chumsky::text::TextExpected<'src, &'src str>>,
-    Err: chumsky::label::LabelError<'src, &'src str, &'src str>,
     Sy: Syntax,
     'interner: 'cache,
     'cache: 'src,
@@ -54,8 +48,6 @@ impl<'src, 'cache, 'interner, O, P, Err, Sy> BuilderParser<'src, 'cache, 'intern
 where
     P: chumsky::Parser<'src, &'src str, O, GreenExtra<'cache, 'interner, Err, Sy>>,
     Err: chumsky::error::Error<'src, &'src str> + 'src,
-    Err: chumsky::label::LabelError<'src, &'src str, chumsky::text::TextExpected<'src, &'src str>>,
-    Err: chumsky::label::LabelError<'src, &'src str, &'src str>,
     'interner: 'cache,
     'cache: 'src,
     Sy: Syntax,
@@ -110,8 +102,6 @@ pub fn ranges<'src, 'cache, 'interner, Err, Sy, R>(
 ) -> impl BuilderParser<'src, 'cache, 'interner, char, Err, Sy>
 where
     Err: chumsky::error::Error<'src, &'src str> + 'src,
-    Err: chumsky::label::LabelError<'src, &'src str, chumsky::text::TextExpected<'src, &'src str>>,
-    Err: chumsky::label::LabelError<'src, &'src str, &'src str>,
     Sy: Syntax,
     R: RangeBounds<char>,
     'interner: 'cache,
@@ -138,8 +128,6 @@ impl<'src, 'cache, 'interner, Err, Sy>
     > for WithCp_<Sy>
 where
     Err: chumsky::error::Error<'src, &'src str> + 'src,
-    Err: chumsky::label::LabelError<'src, &'src str, chumsky::text::TextExpected<'src, &'src str>>,
-    Err: chumsky::label::LabelError<'src, &'src str, &'src str>,
     'cache: 'src,
     'interner: 'src,
     'interner: 'cache,

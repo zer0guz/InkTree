@@ -1,49 +1,35 @@
-
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
 use regex_syntax::hir::Class;
-use snafu::Snafu;
 use syn::{Ident, Lit};
 
-use crate::derive::{
-    Language,
-    ast::SyntaxVariant,
-    attributes::{AttributeError, LanguageElement},
-    codegen::{parseable_impl, struct_def},
-    parser::{FromMeta, MetaError, Mir, MirError},
-    properties::PropertyKind,
+use crate::{
+    derive::{
+        attributes::allowed::ALLOWED_TOKEN,
+        language::{parseable_impl, struct_def},
+        parser::{FromMeta, Mir},
+        properties::PropertyKind,
+    },
+    language::{ElementError, Language, LanguageElement},
 };
-
-#[derive(Debug, Snafu)]
-#[snafu(display("todo text"))]
-pub struct TokenError {
-    source: syn::Error,
-    kind: TokenErrorKind,
-}
-
-#[derive(Debug, Snafu)]
-pub enum TokenErrorKind {
-    #[snafu(display("todo text"))]
-    #[snafu(context(false))]
-    Mir { source: MirError },
-}
 
 #[derive(Debug)]
 pub struct Token {
     pub expr: Mir,
+    name: Ident,
 }
 
 impl Token {
-    pub fn from_lit<'src>(lit: &Lit) -> Result<Self, MetaError> {
+    pub fn from_lit<'src>(lit: &Lit, name: Ident) -> Result<Self, ElementError> {
         let text = match lit {
             Lit::Str(lit_str) => lit_str.value(),
             _ => todo!("token from_lit"),
         };
-        let expr = Mir::parse(text.as_str()).map_err(|err| TokenError {
-            source: syn::Error::new_spanned(lit, "todo"),
-            kind: err.into(),
+        let expr = Mir::parse(text.as_str()).map_err(|err| {
+            syn::Error::new_spanned(lit, format!("todo message mir error: {}", err))
         })?;
-        Ok(Self { expr })
+
+        Ok(Self { expr, name })
     }
     fn parser(expr: &Mir) -> TokenStream {
         let parser = match expr {
@@ -120,29 +106,32 @@ impl Token {
 }
 
 impl FromMeta for Token {
-    fn from_list(list: &syn::MetaList) -> Result<Self, MetaError> {
+    fn from_list(list: &syn::MetaList, name: Option<&Ident>) -> Result<Self, ElementError> {
         let lit: Lit = list.parse_args()?;
-        Ok(Self::from_lit(&lit)?.into())
+        Ok(Self::from_lit(&lit, name.expect("todod name option arg").clone())?.into())
     }
 
-    fn from_name_value(name_value: &syn::MetaNameValue) -> Result<Self, MetaError> {
+    fn from_name_value(
+        name_value: &syn::MetaNameValue,
+        name: Option<&Ident>,
+    ) -> Result<Self, ElementError> {
         match &name_value.value {
-            syn::Expr::Lit(expr_lit) => Ok(Self::from_lit(&expr_lit.lit)?.into()),
+            syn::Expr::Lit(expr_lit) => Ok(Self::from_lit(
+                &expr_lit.lit,
+                name.expect("todo name arg option").clone(),
+            )?
+            .into()),
             _ => todo!("error"),
         }
     }
 }
 
 impl LanguageElement for Token {
-    fn codegen(
-        &self,
-        variant: &SyntaxVariant,
-        language: &Language,
-    ) -> Result<TokenStream, AttributeError> {
+    fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
         let def_body = quote! {};
-        let def = struct_def(def_body, &variant.ident);
+        let def = struct_def(def_body, &self.name);
         let parser = Self::parser(&self.expr);
-        let impl_code = token_impl(&variant.ident, &language.ident, parser);
+        let impl_code = token_impl(&self.name, &language.ident, parser);
 
         Ok(quote! {
             #def
@@ -151,7 +140,11 @@ impl LanguageElement for Token {
     }
 
     fn allowed(&self) -> &'static [PropertyKind] {
-        &[PropertyKind::Padded, PropertyKind::PaddedBy]
+        ALLOWED_TOKEN
+    }
+
+    fn name(&self) -> &Ident {
+        &self.name
     }
 }
 

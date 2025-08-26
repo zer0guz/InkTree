@@ -1,13 +1,9 @@
 use std::marker::PhantomData;
 
-use cstree::{
-    build::NodeCache,
-    green::GreenNode,
-};
+use cstree::{build::NodeCache, green::GreenNode};
 
 use crate::{
-    chumksy_ext::Input,
-    language::{Parseable, Syntax},
+    chumksy_ext::Input, language::{Parseable, Syntax},
 };
 
 pub struct SyntaxEngine<'interner, Sy> {
@@ -32,7 +28,7 @@ where
         }
     }
 
-    fn parse<'src, Err, Tok>(&mut self, input: Input<'src>) -> Result<GreenNode, Err>
+    fn parse<'src, Err, Tok>(&mut self, _input: Input<'src>) -> Result<GreenNode, Err>
     where
         Err: chumsky::error::Error<'src, &'src str> + 'src,
         Tok: Parseable<Syntax = Sy>,

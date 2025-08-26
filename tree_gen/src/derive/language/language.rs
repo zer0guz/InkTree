@@ -1,102 +1,158 @@
-use std::collections::HashMap;
+use crate::derive::language::language_element::LanguageElement;
+use std::
+    collections::{HashMap, hash_map::Entry}
+;
 
 use proc_macro2::TokenStream;
+use snafu::{ResultExt, Snafu};
+use syn::{DeriveInput, Ident, parse::Parse};
+
 use quote::quote;
-use snafu::Snafu;
-use syn::{DeriveInput, Ident};
 
 use crate::{
-    Errors,
     derive::{
-        ast::{EnumError, LanguageEnum, SyntaxVariant},
-        attributes::{Attribute, AttributeError},
+        attributes::SyntaxAttribute,
+        language::{ElementError, SyntaxElement},
         properties::Operator,
     },
+    error::Errors,
     util::IteratorExt,
 };
 
 #[derive(Debug, Snafu)]
 pub enum LanguageError {
+    #[snafu(display(
+        "attributes have to be provided by placing them into tree_gen() SCOPE TODO: {}",
+        source
+    ))]
+    Data { source: syn::Error },
+
+    #[snafu(display(
+        "attributes have to be provided by placing them into tree_gen() SCOPE TODO: {}",
+        source
+    ))]
+    Repr { source: syn::Error },
+
     #[snafu(context(false))]
-    Enum {
-        source: EnumError,
-    },
+    Custom { source: syn::Error },
+
+    #[snafu(display(
+        "attributes have to be provided by placing them into tree_gen() SCOPE TODO: {}",
+        source
+    ))]
     #[snafu(context(false))]
-    Attribute {
-        source: AttributeError,
-    },
-    Root {
-        source: syn::Error,
-    },
+    Element { source: ElementError },
 }
 
 pub struct Language {
+    pub elements: Vec<SyntaxElement>,
     pub ident: Ident,
-    pub root_ident: Option<Ident>,
-    pub idents: HashMap<String, Ident>,
-    pub elements: Vec<SyntaxVariant>,
     pub operators: Vec<Operator>,
+    pub root_idents: Vec<Ident>,
+    pub idents: HashMap<String, Ident>,
 }
 
 impl Language {
-    pub fn new(ident: Ident) -> Self {
-        Self {
-            ident,
-            root_ident: None,
-            idents: HashMap::new(),
-            elements: vec![],
-            operators: vec![],
-        }
-    }
-
     pub fn from_input(input: DeriveInput) -> Result<Self, Errors<LanguageError>> {
-        let syntax_enum = LanguageEnum::from_input(input).map_err(Errors::map_errors)?;
-        let variants = syntax_enum.variants;
-        let mut language = Self::new(syntax_enum.ident);
+        let mut language = Self {
+            elements: Vec::with_capacity(input.attrs.len()),
+            ident: input.ident.clone(),
+            idents: HashMap::new(),
+            operators: vec![],
+            root_idents: vec![],
+        };
 
-        let elements = variants
-            .into_iter()
-            .map(|mut element| {
-                element
-                    .verify(&mut language)
-                    .map_err(Errors::map_errors::<LanguageError>)?;
-                element
-                    .build(&mut language)
-                    .map_err(Errors::map_errors::<LanguageError>)?;
-                Ok(element)
+        let mut repr = vec![];
+
+        input
+            .attrs
+            .iter()
+            .filter(|attr| {
+                if attr.path().is_ident("repr") {
+                    repr.push(*attr);
+                }
+                attr.path().is_ident("tree_gen")
+            })
+            .map(|attribute| {
+                language.handle_element(
+                    SyntaxElement::from_attribute(&attribute).map_err(LanguageError::from)?,
+                )
             })
             .collect_either_flatten()?;
 
-        if language.root_ident.is_none() {
-            todo!("no root error")
-        }
+        let repr_inner = repr
+            .into_iter()
+            .next()
+            .ok_or_else(|| syn::Error::new_spanned(&input, "todo text repr"))
+            .context(ReprSnafu)?
+            .parse_args_with(Ident::parse)
+            .context(ReprSnafu)?;
 
-        language.elements = elements;
+        if !(repr_inner == "u32") {
+            return Err(syn::Error::new_spanned(repr_inner, "todo text repr2"))
+                .context(ReprSnafu)?;
+        };
+
+        let syn::Data::Enum(syntax) = &input.data else {
+            Err(syn::Error::new_spanned(&input, "oups")).context(DataSnafu)?
+        };
+
+        syntax
+            .variants
+            .iter()
+            .map(SyntaxElement::from_variant)
+            .collect_either_flatten_into()?
+            .into_iter()
+            .flatten()
+            .map(|element| language.handle_element(element))
+            .collect_either_flatten()?;
+
         Ok(language)
     }
 
-    pub fn set_root(&mut self, ident: Ident) -> Result<(), LanguageError> {
-        let old = self.root_ident.replace(ident);
-        if let Some(_) = old
-            && let Some(_) = &self.root_ident
-        {
-            todo!("root error")
+    fn handle_element(&mut self, element: SyntaxElement) -> Result<(), Errors<LanguageError>> {
+        let name = element.attribute.name();
+
+        match self.idents.entry(name.to_string()) {
+            Entry::Vacant(v) => {
+                v.insert(name.clone());
+            }
+            Entry::Occupied(_) => {
+                return Err(syn::Error::new_spanned(name, "duplicate ident"))
+                    .map_err(Errors::from)
+                    .map_err(Errors::map_errors);
+            }
         }
 
-        Ok(())
+        element.build(self).map_err(Errors::map_errors)?;
+
+        self.elements.push(element);
+
+        return Ok(());
     }
-    pub fn codegen(&self) -> Result<TokenStream, Errors<LanguageError>> {
+
+    pub fn codegen(self) -> Result<TokenStream, Errors<LanguageError>> {
+        match self.root_idents.len() {
+            0 => Err(syn::Error::new_spanned(&self.ident, "no root todo text")),
+            1 => Ok(()),
+            _ => Err(syn::Error::new_spanned(
+                &self.root_idents[1],
+                "multiple roots todo text",
+            )),
+        }
+        .map_err(LanguageError::from)?;
+
         let mut stream = TokenStream::new();
 
         stream.extend(self.syntax_impl());
 
-        let code = self
+        let variants_code = self
             .elements
             .iter()
             .map(|variant| Ok(variant.codegen(&self)?))
             .collect_either()?;
 
-        stream.extend(code);
+        stream.extend(variants_code);
 
         Ok(stream)
     }
@@ -106,9 +162,9 @@ impl Language {
             .elements
             .iter()
             .map(|variant| {
-                let ident = &variant.ident;
+                let ident = &variant.attribute.name();
                 let static_text = match variant.attribute {
-                    Attribute::StaticToken(ref static_token) => {
+                    SyntaxAttribute::StaticToken(ref static_token) => {
                         let text = &static_token.text;
                         quote! {
                             #ident => Some(#text),
@@ -127,7 +183,7 @@ impl Language {
             .collect();
         let ident = &self.ident;
         let variant_count = self.elements.len() as u32;
-        let root = self.root_ident.as_ref().unwrap();
+        let root = &self.root_idents[0];
         quote! {
             impl ::tree_gen::cstree::Syntax for #ident {
                 fn from_raw(raw: tree_gen::cstree::RawSyntaxKind) -> Self {
@@ -146,7 +202,7 @@ impl Language {
             impl ::tree_gen::Syntax for #ident {
                 const ROOT: &'static Self = &#ident::#root;
 
-                const STATIC_TOKENS: &'static [Self] = &[TestLang::KwLet, TestLang::KwPub];
+                const STATIC_TOKENS: &'static [Self] = &[];
 
                 const NODES: &'static [Self] = &[];
 
@@ -175,9 +231,6 @@ impl Language {
                 ) -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, Self>
                 where
                     Err: chumsky::error::Error<'src, ::tree_gen::chumksy_ext::Input<'src>> + 'src,
-                    Err: chumsky::label::LabelError<'src,&'src str,chumsky::text::TextExpected<'src,&'src str>>,
-                    Err: chumsky::label::LabelError<'src,&'src str,&'src str>,
-
 
                     'interner: 'cache,
                     'cache: 'src
@@ -210,9 +263,6 @@ pub fn parseable_impl(parser: TokenStream, ident: &Ident, lang_ident: &Ident) ->
             -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident>
             where
                 Err: chumsky::error::Error<'src, &'src str> + 'src,
-                Err: chumsky::label::LabelError<'src,&'src str,chumsky::text::TextExpected<'src,&'src str>>,
-                Err: chumsky::label::LabelError<'src,&'src str,&'src str>,
-
 
                 'cache: 'src,
                 'interner: 'cache,

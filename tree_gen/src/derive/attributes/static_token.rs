@@ -1,45 +1,39 @@
-use std::{collections::HashSet};
 
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Ident, Lit, LitStr, MetaList};
 
 use crate::{
-    Errors,
     derive::{
-        Language, LanguageError,
-        ast::SyntaxVariant,
-        attributes::{AttributeError, LanguageElement},
-        codegen::{parseable_impl, struct_def},
-        parser::{FromMeta, MetaError},
-        properties::{Operator, Property, PropertyKind},
-    },
-};
+        attributes::allowed::ALLOWED_STATIC_TOKEN, language::{parseable_impl, struct_def}, parser::{FromMeta}, properties::{Operator, Property, PropertyKind}
+    }, language::{ElementError, Language, LanguageElement}}
+;
 
 pub struct StaticToken {
     pub text: String,
+    name: Ident
 }
 
 impl StaticToken {
-    fn from_lit(lit: &Lit) -> Result<Self, MetaError> {
+    fn from_lit(lit: &Lit,name:Ident) -> Result<Self, ElementError> {
         let text = match lit {
             Lit::Str(str) => str.value(),
             Lit::ByteStr(_) => todo!("support byte str"),
             _ => todo!("lit type error"),
         };
-        Ok(Self { text })
+        Ok(Self { text, name })
     }
 }
 
 impl FromMeta for StaticToken {
-    fn from_list(list: &MetaList) -> Result<Self, MetaError> {
+    fn from_list(list: &MetaList,name:Option<&Ident>) -> Result<Self, ElementError> {
         let lit: LitStr = list.parse_args()?;
-        Ok(Self { text: lit.value() }.into())
+        Ok(Self { text: lit.value(), name: name.expect("todo name option").clone() }.into())
     }
 
-    fn from_name_value(name_value: &syn::MetaNameValue) -> Result<Self, MetaError> {
+    fn from_name_value(name_value: &syn::MetaNameValue,name:Option<&Ident>) -> Result<Self, ElementError> {
         match &name_value.value {
-            syn::Expr::Lit(expr_lit) => Ok(Self::from_lit(&expr_lit.lit)?.into()),
+            syn::Expr::Lit(expr_lit) => Ok(Self::from_lit(&expr_lit.lit,name.expect("todo name option").clone())?.into()),
             _ => Err(syn::Error::new_spanned(
                 &name_value.value,
                 "todo better text expr type error",
@@ -51,12 +45,12 @@ impl FromMeta for StaticToken {
 impl LanguageElement for StaticToken {
     fn codegen(
         &self,
-        variant: &SyntaxVariant,
         language: &Language,
-    ) -> Result<TokenStream, AttributeError> {
+    ) -> Result<TokenStream, ElementError> {
+
         let def_body = quote! {};
-        let def = struct_def(def_body, &variant.ident);
-        let impl_code = static_token_impl(&self.text, &variant.ident, &language.ident);
+        let def = struct_def(def_body, &self.name);
+        let impl_code = static_token_impl(&self.text,&self.name, &language.ident);
         Ok(quote! {
             #def
             #impl_code
@@ -64,29 +58,22 @@ impl LanguageElement for StaticToken {
     }
 
     fn allowed(&self) -> &'static [PropertyKind] {
-        &[
-            PropertyKind::Keyword,
-            PropertyKind::OpInfix,
-            PropertyKind::OpPrefix,
-            PropertyKind::OpPostfix,
-            PropertyKind::Padded,
-            PropertyKind::PaddedBy,
-        ]
+        ALLOWED_STATIC_TOKEN
     }
 
-    fn build(
-        &self,
-        properties: HashSet<Property>,
-        variant: &SyntaxVariant,
-        lang: &mut Language,
-    ) -> Result<(), Errors<LanguageError>> {
-        properties.into_iter().for_each(|prop| {
+    
+    fn name(&self) ->  &Ident {
+        &self.name
+    }
+    
+    fn build(&self,properties: &Vec<Property>,language: &mut Language) -> Result<(),ElementError>{
+         properties.iter().for_each(|prop| {
             if let Some(kind) = prop.try_as_operator() {
-                lang.operators.push(Operator {
+                language.operators.push(Operator {
                     kind,
-                    ident: variant.ident.clone(),
+                    ident: self.name.clone(),
                 });
-            }
+            };
         });
 
         Ok(())

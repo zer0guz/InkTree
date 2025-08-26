@@ -58,7 +58,7 @@ pub trait IteratorExt: Iterator {
 
 impl<A> IteratorExt for A where A: Iterator {}
 
-pub fn transpose_errors<I, E>(res: Result<I, E>) -> impl Iterator<Item = Result<I::Item, E>>
+pub fn _transpose_errors<I, E>(res: Result<I, E>) -> impl Iterator<Item = Result<I::Item, E>>
 where
     I: IntoIterator,
 {

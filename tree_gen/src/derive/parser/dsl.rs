@@ -1,5 +1,9 @@
+use std::collections::HashMap;
 
 use chumsky::extra::Err;
+use proc_macro2::TokenStream;
+use quote::quote;
+use syn::Ident;
 
 use crate::chumsky::prelude::*;
 
@@ -29,6 +33,43 @@ enum UnOp {
     Opt,
     Star,
     Plus,
+}
+
+impl DslExpr {
+    pub fn parser(&self, idents: &HashMap<String, Ident>) -> TokenStream {
+        match self {
+            DslExpr::Just(text) => {
+                let ident = idents.get(text).expect("todo hashmap get");
+                quote! { #ident::parser() }
+            }
+            DslExpr::Seq(exprs) => {
+                exprs
+                    .iter()
+                    .map(|e| Self::parser(e, idents))
+                    .fold(quote! {}, |acc, p| {
+                        if acc.is_empty() {
+                            p
+                        } else {
+                            quote! { #acc.then(#p) }
+                        }
+                    })
+            }
+            DslExpr::Opt(inner) | DslExpr::Star(inner) | DslExpr::Plus(inner) => {
+                let p = Self::parser(inner, idents);
+                match self {
+                    &DslExpr::Opt(_) => quote! { #p.or_not() },
+                    &DslExpr::Star(_) => quote! { #p.repeated() },
+                    &DslExpr::Plus(_) => quote! { #p.repeated().at_least(1) },
+                    _ => unreachable!(),
+                }
+            }
+            DslExpr::Alt(a, b) => {
+                let pa = Self::parser(a, idents);
+                let pb = Self::parser(b, idents);
+                quote! { #pa.or(#pb) }
+            }
+        }
+    }
 }
 
 pub fn dsl_parser<'a>() -> impl Parser<'a, &'a [DslToken], DslExpr> {
