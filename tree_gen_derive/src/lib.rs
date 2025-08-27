@@ -2,7 +2,8 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, parse_macro_input};
 use tree_gen::{
-    language::{Language, LanguageError}, Errors
+    Errors,
+    language::{Language, LanguageError},
 };
 
 #[proc_macro_derive(SyntaxGenerator, attributes(tree_gen))]

@@ -1,4 +1,7 @@
-use crate::derive::{attributes::SyntaxAttributeKind, language::element::LanguageElement};
+use crate::{
+    derive::{attributes::SyntaxAttributeKind, language::element::LanguageElement},
+    language::rule_graph::RuleGraph,
+};
 use std::collections::{HashMap, hash_map::Entry};
 
 use proc_macro2::TokenStream;
@@ -49,6 +52,7 @@ pub struct Language {
     pub operators: Vec<Operator>,
     pub root_idents: Vec<Ident>,
     pub idents: HashMap<String, Ident>,
+    pub cycle_graph: RuleGraph,
 }
 
 impl Language {
@@ -59,6 +63,7 @@ impl Language {
             idents: HashMap::new(),
             operators: vec![],
             root_idents: vec![],
+            cycle_graph: RuleGraph::new(),
         };
 
         let mut repr = vec![];
@@ -109,7 +114,7 @@ impl Language {
         Ok(language)
     }
 
-    fn handle_element(&mut self, element: Element) -> Result<(), Errors<LanguageError>> {
+    fn handle_element(&mut self, mut element: Element) -> Result<(), Errors<LanguageError>> {
         let name = element.attribute.name();
 
         match self.idents.entry(name.to_string()) {
@@ -131,6 +136,9 @@ impl Language {
     }
 
     pub fn codegen(self) -> Result<TokenStream, Errors<LanguageError>> {
+        // if self.cycle_graph.has_cycle() {
+        //     todo!("cycle")
+        // }
         match self.root_idents.len() {
             0 => Err(syn::Error::new_spanned(&self.ident, "no root todo text")),
             1 => Ok(()),
@@ -228,7 +236,7 @@ impl Language {
 
                 fn parser<'src, 'cache, 'interner, Err>(
                     self,
-                ) -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, Self>
+                ) -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, Self> + Clone
                 where
                     Err: chumsky::error::Error<'src, ::tree_gen::chumksy_ext::Input<'src>> + 'src,
 
@@ -260,7 +268,7 @@ pub fn parseable_impl(parser: TokenStream, ident: &Ident, lang_ident: &Ident) ->
             type Syntax = TestLang;
 
             fn parser<'src, 'cache, 'interner, Err>()
-            -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident>
+            -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident> + Clone
             where
                 Err: chumsky::error::Error<'src, &'src str> + 'src,
 

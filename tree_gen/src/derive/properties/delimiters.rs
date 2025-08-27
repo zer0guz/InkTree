@@ -20,7 +20,7 @@ impl DelimitedBy {
 }
 
 impl FromMeta for DelimitedBy {
-    fn from_list(list: &syn::MetaList,_name: Option<&Ident>) -> Result<Self, ElementError> {
+    fn from_list(list: &syn::MetaList, _name: Option<&Ident>) -> Result<Self, ElementError> {
         let (open, close) = list
             .parse_args_with(Punctuated::<Ident, Comma>::parse_terminated)?
             .into_iter()

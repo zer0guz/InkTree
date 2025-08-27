@@ -117,14 +117,14 @@ impl Postfix {
 }
 
 impl FromMeta for Prefix {
-    fn from_list(list: &MetaList,_name: Option<&Ident>) -> Result<Self, ElementError> {
+    fn from_list(list: &MetaList, _name: Option<&Ident>) -> Result<Self, ElementError> {
         let lit: LitInt = list.parse_args()?;
 
         Ok(Self::from_lit_int(lit)?.into())
     }
 }
 impl FromMeta for Postfix {
-    fn from_list(list: &MetaList,_name: Option<&Ident>) -> Result<Self, ElementError> {
+    fn from_list(list: &MetaList, _name: Option<&Ident>) -> Result<Self, ElementError> {
         let lit: LitInt = list.parse_args()?;
 
         Ok(Self::from_lit_int(lit)?.into())
@@ -132,7 +132,7 @@ impl FromMeta for Postfix {
 }
 
 impl FromMeta for Infix {
-    fn from_list(list: &MetaList,_name: Option<&Ident>) -> Result<Self, ElementError> {
+    fn from_list(list: &MetaList, _name: Option<&Ident>) -> Result<Self, ElementError> {
         if let Some((assoc, prec)) = list
             .parse_args_with(Punctuated::<Expr, Comma>::parse_terminated)?
             .into_iter()

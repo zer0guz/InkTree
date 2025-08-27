@@ -8,7 +8,7 @@ use syn::{Attribute, Ident, Meta, MetaList, Variant, punctuated::Punctuated, tok
 use crate::{
     Errors,
     derive::{
-        attributes::SyntaxAttribute,
+        attributes::*,
         properties::{Property, PropertyKind, Root},
     },
     language::Language,
@@ -106,7 +106,7 @@ impl Element {
         })
     }
 
-    pub fn build(&self, language: &mut Language) -> Result<(), Errors<ElementError>> {
+    pub fn build(&mut self, language: &mut Language) -> Result<(), Errors<ElementError>> {
         self.properties
             .iter()
             .map(|prop| {
@@ -139,8 +139,9 @@ impl Element {
 #[enum_dispatch]
 pub trait LanguageElement: Sized {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError>;
+
     fn build(
-        &self,
+        &mut self,
         _properties: &Vec<Property>,
         _language: &mut Language,
     ) -> Result<(), ElementError> {

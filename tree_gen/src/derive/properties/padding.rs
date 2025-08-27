@@ -12,7 +12,7 @@ pub fn _padded(inner: TokenStream) -> TokenStream {
 }
 
 impl FromMeta for Padded {
-    fn from_path(_: &syn::Path,_name: Option<&Ident>) -> Result<Self, ElementError> {
+    fn from_path(_: &syn::Path, _name: Option<&Ident>) -> Result<Self, ElementError> {
         Ok(Padded {})
     }
 }
@@ -23,7 +23,7 @@ pub struct PaddedBy {
 }
 
 impl FromMeta for PaddedBy {
-    fn from_list(list: &syn::MetaList,_name: Option<&Ident>) -> Result<Self, ElementError> {
+    fn from_list(list: &syn::MetaList, _name: Option<&Ident>) -> Result<Self, ElementError> {
         Ok(Self {
             padding: list.parse_args_with(Ident::parse)?,
         })

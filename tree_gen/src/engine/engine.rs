@@ -3,7 +3,8 @@ use std::marker::PhantomData;
 use cstree::{build::NodeCache, green::GreenNode};
 
 use crate::{
-    chumksy_ext::Input, language::{Parseable, Syntax},
+    chumksy_ext::Input,
+    language::{Parseable, Syntax},
 };
 
 pub struct SyntaxEngine<'interner, Sy> {

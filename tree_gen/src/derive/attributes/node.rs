@@ -1,4 +1,3 @@
-
 use std::collections::HashMap;
 
 use chumsky::Parser;
@@ -9,20 +8,29 @@ use syn::{Ident, MetaList};
 
 use crate::{
     derive::{
-        attributes::{
-            allowed::ALLOWED_NODE, rule::Rule
-        }, language::{parseable_impl, struct_def}, parser::{dsl_lexer, dsl_parser, FromMeta}, properties::PropertyKind
-    }, language::{ElementError, Language, LanguageElement}}
-;
+        attributes::{allowed::ALLOWED_NODE, rule::Rule},
+        language::{parseable_impl, struct_def},
+        parser::{FromMeta, dsl_lexer, dsl_parser},
+        properties::{Property, PropertyKind},
+    },
+    language::{ElementError, Language, LanguageElement},
+};
 
 #[derive(Debug, From)]
 pub struct Node(Rule);
 
 impl Node {
     pub fn from_string(input: String, name: &Ident) -> Result<Self, syn::Error> {
-        let tokens = dsl_lexer().parse(&input).into_result().expect("lexer error todo");
-        let dsl = dsl_parser().parse(&tokens).into_result().expect("parser error todo").into();
-        Ok(Self(Rule{dsl,name: name.clone(), parameters: HashMap::new()}))
+        let tokens = dsl_lexer()
+            .parse(&input)
+            .into_result()
+            .expect("lexer error todo");
+        let dsl = dsl_parser()
+            .parse(&tokens)
+            .into_result()
+            .expect("parser error todo")
+            .into();
+        Ok(Self(Rule::new(dsl, name.clone(), HashMap::new())))
     }
 
     pub fn parser(&self, language: &Language) -> TokenStream {
@@ -38,6 +46,23 @@ impl Node {
         parser = quote! {#parser.as_node(#lang_ident::#name)};
 
         parseable_impl(parser, name, lang_ident)
+    }
+
+    pub fn recursive_parser_body(&self, language: &Language) -> TokenStream {
+        let lang_ident = &language.ident;
+        let name = &self.name();
+
+        // Generate body with substitution: self.0.dsl where references to self.name use `this.clone()`
+        let body = self.0.parser_body(&language);
+
+        quote! {
+            use ::tree_gen::chumsky::prelude::*;
+            use tree_gen::chumksy_ext::*;
+
+            recursive(|this| {
+                #body
+            }).as_node(#lang_ident::#name)
+        }
     }
 
     pub fn parser_body(&self, language: &Language) -> TokenStream {
@@ -74,5 +99,14 @@ impl LanguageElement for Node {
 
     fn name(&self) -> &Ident {
         self.0.name()
+    }
+
+    fn build(
+        &mut self,
+        properties: &Vec<Property>,
+        language: &mut Language,
+    ) -> Result<(), ElementError> {
+        self.0.build(properties, language)?;
+        Ok(())
     }
 }

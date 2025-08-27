@@ -15,6 +15,7 @@ pub enum DslExpr {
     Star(Box<DslExpr>),
     Plus(Box<DslExpr>),
     Alt(Box<DslExpr>, Box<DslExpr>),
+    Call { name: String, args: Vec<DslExpr> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,6 +27,9 @@ pub enum DslToken {
     Pipe,
     LParen,
     RParen,
+    Lt,    // <
+    Gt,    // >
+    Comma, // ,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,30 +44,39 @@ impl DslExpr {
         &self,
         idents: &HashMap<String, Ident>,
         parameters: &HashMap<String, Ident>,
+        recursive_self_ident: Option<&Ident>, // NEW: which rule are we expanding for?
     ) -> TokenStream {
         match self {
             DslExpr::Just(text) => {
-                let ident = if let Some(ident) = idents.get(text) {
-                    ident
-                } else if let Some(ident) = parameters.get(text) {
-                    ident
-                } else {
-                    todo!("asbdashud")
-                };
-                quote! { #ident::parser() }
-            }
-            DslExpr::Seq(exprs) => exprs
-                .iter()
-                .map(|e| Self::parser(e, idents, parameters))
-                .fold(quote! {}, |acc, p| {
-                    if acc.is_empty() {
-                        p
-                    } else {
-                        quote! { #acc.then(#p) }
+                if let Some(me) = recursive_self_ident {
+                    if text == &me.to_string() {
+                        return quote! { this };
                     }
-                }),
+                }
+
+                if let Some(ident) = idents.get(text) {
+                    quote! { #ident::parser() }
+                } else if let Some(ident) = parameters.get(text) {
+                    quote! { #ident.clone() }
+                } else {
+                    todo!("todo unknown symbol")
+                }
+            }
+            DslExpr::Seq(exprs) => {
+                let folded = exprs
+                    .iter()
+                    .map(|e| Self::parser(e, idents, parameters, recursive_self_ident))
+                    .fold(quote! {}, |acc, p| {
+                        if acc.is_empty() {
+                            p
+                        } else {
+                            quote! { #acc.then(#p) }
+                        }
+                    });
+                quote! { #folded.ignored() }
+            }
             DslExpr::Opt(inner) | DslExpr::Star(inner) | DslExpr::Plus(inner) => {
-                let p = Self::parser(inner, idents, parameters);
+                let p = Self::parser(inner, idents, parameters, recursive_self_ident);
                 match self {
                     &DslExpr::Opt(_) => quote! { #p.or_not() },
                     &DslExpr::Star(_) => quote! { #p.repeated() },
@@ -72,9 +85,53 @@ impl DslExpr {
                 }
             }
             DslExpr::Alt(a, b) => {
-                let pa = Self::parser(a, idents, parameters);
-                let pb = Self::parser(b, idents, parameters);
+                let pa = Self::parser(a, idents, parameters, recursive_self_ident);
+                let pb = Self::parser(b, idents, parameters, recursive_self_ident);
                 quote! { #pa.or(#pb) }
+            }
+            DslExpr::Call { name, args } => {
+                if let Some(me) = recursive_self_ident {
+                    if name == &me.to_string() {
+                        // recursive call
+                        let arg_tokens = args
+                            .iter()
+                            .map(|a| a.parser(idents, parameters, recursive_self_ident));
+                        return quote! { Self::parser(#(#arg_tokens),*).clone() };
+                    }
+                }
+
+                let name_ident = idents
+                    .get(name)
+                    .unwrap_or_else(|| panic!("unknown rule {name}"));
+                let arg_tokens = args
+                    .iter()
+                    .map(|a| Self::parser(a, idents, parameters, recursive_self_ident));
+                quote! { #name_ident::parser(#(#arg_tokens),*) }
+            }
+        }
+    }
+    pub fn collect_deps(&self, deps: &mut std::collections::HashSet<String>) {
+        match self {
+            DslExpr::Just(name) => {
+                deps.insert(name.clone());
+            }
+            DslExpr::Seq(exprs) => {
+                for e in exprs {
+                    e.collect_deps(deps);
+                }
+            }
+            DslExpr::Opt(inner) | DslExpr::Star(inner) | DslExpr::Plus(inner) => {
+                inner.collect_deps(deps);
+            }
+            DslExpr::Alt(a, b) => {
+                a.collect_deps(deps);
+                b.collect_deps(deps);
+            }
+            DslExpr::Call { name, args } => {
+                deps.insert(name.clone());
+                for a in args {
+                    a.collect_deps(deps);
+                }
             }
         }
     }
@@ -82,7 +139,21 @@ impl DslExpr {
 
 pub fn dsl_parser<'a>() -> impl Parser<'a, &'a [DslToken], DslExpr> {
     recursive(|expr| {
-        let atom = select! { DslToken::Ident(s) => DslExpr::Just(s.to_owned()) }
+        let ident = select! { DslToken::Ident(s) => s };
+
+        let call = ident
+            .clone()
+            .then_ignore(just(DslToken::Lt))
+            .then(
+                expr.clone()
+                    .separated_by(just(DslToken::Comma))
+                    .collect::<Vec<_>>(),
+            )
+            .then_ignore(just(DslToken::Gt))
+            .map(|(name, args)| DslExpr::Call { name, args });
+
+        let atom = call
+            .or(ident.map(DslExpr::Just))
             .or(expr
                 .clone()
                 .delimited_by(just(DslToken::LParen), just(DslToken::RParen)))
@@ -241,6 +312,9 @@ pub fn dsl_lexer<'a>() -> impl Parser<'a, &'a str, Vec<DslToken>, Err<Simple<'a,
         just('|').to(DslToken::Pipe),
         just('(').to(DslToken::LParen),
         just(')').to(DslToken::RParen),
+        just('<').to(DslToken::Lt),
+        just('>').to(DslToken::Gt),
+        just(',').to(DslToken::Comma),
     ))
     .padded();
 

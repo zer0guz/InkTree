@@ -6,7 +6,7 @@ use crate::{derive::parser::FromMeta, language::ElementError};
 pub struct Root;
 
 impl FromMeta for Root {
-    fn from_path(_: &syn::Path,_name: Option<&Ident>) -> Result<Self, ElementError> {
+    fn from_path(_: &syn::Path, _name: Option<&Ident>) -> Result<Self, ElementError> {
         Ok(Self)
     }
 }

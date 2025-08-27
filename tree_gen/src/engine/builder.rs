@@ -5,7 +5,8 @@ use cstree::{
 };
 
 use crate::{
-    chumksy_ext::{GreenState, Input}, language::Syntax,
+    chumksy_ext::{GreenState, Input},
+    language::Syntax,
 };
 
 pub struct Builder<'cache, 'interner, Sy>

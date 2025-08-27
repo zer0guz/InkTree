@@ -2,6 +2,7 @@ mod delimiters;
 mod keyword;
 mod operator;
 mod padding;
+mod recursive;
 mod root;
 mod whitespace;
 
@@ -15,15 +16,19 @@ use syn::Meta;
 pub use delimiters::*;
 pub use operator::*;
 pub use padding::*;
+pub use recursive::Recursive;
 pub use root::*;
 
-use crate::{derive::{
-    parser::FromMeta,
-    properties::{
-        operator::{Infix, Postfix, Prefix},
-        whitespace::Whitespace,
+use crate::{
+    derive::{
+        parser::FromMeta,
+        properties::{
+            operator::{Infix, Postfix, Prefix},
+            whitespace::Whitespace,
+        },
     },
-}, language::ElementError};
+    language::ElementError,
+};
 
 #[derive(Debug, PartialEq, Eq, Hash, EnumDiscriminants, From, EnumTryAs)]
 #[strum_discriminants(vis(pub), strum(serialize_all = "snake_case"))]
@@ -34,6 +39,7 @@ pub enum Property {
     OpInfix(Infix),
     OpPostfix(Postfix),
     Root(Root),
+    Recursive(Recursive),
     Padded(Padded),
     PaddedBy(PaddedBy),
     DelimitedBy(DelimitedBy),
@@ -63,15 +69,16 @@ impl PropertyKind {
     pub fn from_meta(self, meta: &Meta) -> Result<Property, ElementError> {
         use PropertyKind as Pk;
         match self {
-            Pk::Keyword => Ok(Keyword::from_meta(meta,None)?.into()),
-            Pk::Root => Ok(Root::from_meta(meta,None)?.into()),
-            Pk::OpPrefix => Ok(Prefix::from_meta(meta,None)?.into()),
-            Pk::OpInfix => Ok(Infix::from_meta(meta,None)?.into()),
-            Pk::OpPostfix => Ok(Postfix::from_meta(meta,None)?.into()),
-            Pk::Padded => Ok(Padded::from_meta(meta,None)?.into()),
-            Pk::PaddedBy => Ok(PaddedBy::from_meta(meta,None)?.into()),
-            Pk::DelimitedBy => Ok(DelimitedBy::from_meta(meta,None)?.into()),
-            Pk::Whitespace => Ok(Whitespace::from_meta(meta,None)?.into()),
+            Pk::Keyword => Ok(Keyword::from_meta(meta, None)?.into()),
+            Pk::Root => Ok(Root::from_meta(meta, None)?.into()),
+            Pk::OpPrefix => Ok(Prefix::from_meta(meta, None)?.into()),
+            Pk::OpInfix => Ok(Infix::from_meta(meta, None)?.into()),
+            Pk::OpPostfix => Ok(Postfix::from_meta(meta, None)?.into()),
+            Pk::Padded => Ok(Padded::from_meta(meta, None)?.into()),
+            Pk::PaddedBy => Ok(PaddedBy::from_meta(meta, None)?.into()),
+            Pk::DelimitedBy => Ok(DelimitedBy::from_meta(meta, None)?.into()),
+            Pk::Whitespace => Ok(Whitespace::from_meta(meta, None)?.into()),
+            Pk::Recursive => Ok(Recursive::from_meta(meta, None)?.into()),
         }
     }
 }

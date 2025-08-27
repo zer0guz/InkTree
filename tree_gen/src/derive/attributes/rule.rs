@@ -16,7 +16,7 @@ use crate::{
         attributes::allowed::ALLOWED_RULE,
         language::struct_def,
         parser::{DslExpr, FromMeta},
-        properties::PropertyKind,
+        properties::{Property, PropertyKind, Recursive},
     },
     language::{ElementError, Language, LanguageElement},
 };
@@ -26,29 +26,72 @@ pub struct Rule {
     pub dsl: DslExpr,
     pub name: Ident,
     pub parameters: HashMap<String, Ident>,
+    pub is_recursive: bool,
 }
 
 impl Rule {
+    pub fn new(dsl: DslExpr, name: Ident, parameters: HashMap<String, Ident>) -> Self {
+        Self {
+            dsl,
+            name,
+            parameters,
+            is_recursive: false,
+        }
+    }
+
     pub fn parser_body(&self, language: &Language) -> TokenStream {
-        let body = self.dsl.parser(&language.idents, &self.parameters);
+        if self.is_recursive {
+            self.recursive_parser_body(language)
+        } else {
+            self.plain_parser_body(language)
+        }
+    }
+
+    fn plain_parser_body(&self, language: &Language) -> TokenStream {
+        let body = self.dsl.parser(&language.idents, &self.parameters, None);
         quote! {
             use ::tree_gen::chumsky::prelude::*;
             use tree_gen::chumksy_ext::*;
             #body
         }
     }
+    fn recursive_parser_body(&self, language: &Language) -> TokenStream {
+        let body = self
+            .dsl
+            .parser(&language.idents, &self.parameters, Some(&self.name));
 
-    fn parser(&self, language: &Language) -> TokenStream {
+        quote! {
+            use ::tree_gen::chumsky::prelude::*;
+            use tree_gen::chumksy_ext::*;
+
+            recursive(|this| {
+                #body
+            })
+        }
+    }
+
+    pub fn parser(&self, language: &Language) -> TokenStream {
         let lang_ident = &language.ident;
         let name = &self.name;
         let body = self.parser_body(language);
+
+        // Collect parameters for the parser fn signature
+        let param_idents: Vec<_> = self.parameters.values().collect();
+
+        // Generate each parameter declaration
+        let param_decls = param_idents.iter().map(|ident| {
+            quote! {
+                #ident: impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident> + Clone
+            }
+        });
+
         quote! {
             impl #name {
-                fn parser<'src, 'cache, 'interner, Err>()
-                -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident>
+                fn parser<'src, 'cache, 'interner, Err>(
+                    #(#param_decls),*
+                ) -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident> + Clone
                 where
                     Err: chumsky::error::Error<'src, &'src str> + 'src,
-
                     'cache: 'src,
                     'interner: 'cache,
                 {
@@ -56,6 +99,16 @@ impl Rule {
                 }
             }
         }
+    }
+
+    fn dependencies(&self) -> std::collections::HashSet<String> {
+        let mut deps = std::collections::HashSet::new();
+        self.dsl.collect_deps(&mut deps);
+        // strip out parameter names (they’re not real rules)
+        for param in self.parameters.keys() {
+            deps.remove(param);
+        }
+        deps
     }
 }
 
@@ -70,18 +123,18 @@ impl Parse for Rule {
         // parse the rule name
         let name: Ident = input.parse()?;
 
-        // optionally parse parameters in parentheses
-        let parameters = if input.peek(syn::token::Paren) {
-            let content;
-            syn::parenthesized!(content in input);
-            let params: Punctuated<Ident, Token![,]> =
-                content.parse_terminated(Ident::parse, Token![,])?;
+        // optional generic-like params: <x, y, z>
+        let parameters = if input.peek(syn::Token![<]) {
+            let _: syn::Token![<] = input.parse()?;
+            let params: syn::punctuated::Punctuated<syn::Ident, syn::Token![,]> =
+                Punctuated::parse_separated_nonempty(&input)?;
+            let _: syn::Token![>] = input.parse()?;
             params
                 .into_iter()
                 .map(|ident| (ident.to_string(), ident))
                 .collect()
         } else {
-            HashMap::new()
+            std::collections::HashMap::new()
         };
 
         // expect '='
@@ -103,6 +156,7 @@ impl Parse for Rule {
             dsl,
             name,
             parameters,
+            is_recursive: false,
         })
     }
 }
@@ -125,5 +179,20 @@ impl LanguageElement for Rule {
 
     fn name(&self) -> &Ident {
         &self.name
+    }
+
+    fn build(
+        &mut self,
+        properties: &Vec<Property>,
+        language: &mut Language,
+    ) -> Result<(), ElementError> {
+        if properties.contains(&Property::Recursive(Recursive)) {
+            self.is_recursive = true;
+        };
+        // Insert into dependency graph
+        let deps = self.dependencies();
+        language.cycle_graph.add_deps(self.name.to_string(), deps);
+
+        Ok(())
     }
 }

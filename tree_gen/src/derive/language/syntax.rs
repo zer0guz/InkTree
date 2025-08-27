@@ -26,4 +26,3 @@ pub trait Syntax: cstree::Syntax + 'static {
         'interner: 'cache,
         'cache: 'src;
 }
-
