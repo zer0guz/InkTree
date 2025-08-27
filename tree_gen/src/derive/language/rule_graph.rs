@@ -19,25 +19,6 @@ impl RuleGraph {
         self.adj.entry(from).or_default().extend(deps);
     }
 
-    fn dfs(&self, node: &str, visited: &mut HashSet<String>, stack: &mut HashSet<String>) -> bool {
-        if !visited.contains(node) {
-            visited.insert(node.to_string());
-            stack.insert(node.to_string());
-
-            if let Some(neighbors) = self.adj.get(node) {
-                for neighbor in neighbors {
-                    if !visited.contains(neighbor) && self.dfs(neighbor, visited, stack) {
-                        return true;
-                    } else if stack.contains(neighbor) {
-                        return true; // back-edge => cycle
-                    }
-                }
-            }
-        }
-        stack.remove(node);
-        false
-    }
-
     pub fn recursive_components(&self) -> Vec<Vec<String>> {
         let mut index = 0usize;
         let mut indices = HashMap::new();

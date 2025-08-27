@@ -4,12 +4,10 @@ use crate::{
     derive::{
         attributes::{Node, Pratt, Rule, StaticToken, Token},
         parser::FromMeta,
-        properties::{Property, PropertyKind},
     },
-    language::{ElementError, Language, LanguageElement},
+    language::ElementError,
 };
 use enum_dispatch::enum_dispatch;
-use proc_macro2::TokenStream;
 use strum::{EnumDiscriminants, EnumString};
 use syn::{Ident, Meta};
 

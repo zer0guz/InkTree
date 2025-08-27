@@ -7,29 +7,29 @@ use crate::{
     language::{Parseable, Syntax},
 };
 
-pub struct SyntaxEngine<'interner, Sy> {
+pub struct _SyntaxEngine<'interner, Sy> {
     cache: NodeCache<'interner>,
     _phantom: PhantomData<Sy>,
 }
 
-impl<'interner, Sy> SyntaxEngine<'interner, Sy>
+impl<'interner, Sy> _SyntaxEngine<'interner, Sy>
 where
     Sy: Syntax,
 {
-    pub fn new() -> Self {
+    pub fn _new() -> Self {
         Self {
             cache: NodeCache::new(),
             _phantom: PhantomData,
         }
     }
-    pub fn from_cache(cache: NodeCache<'interner>) -> Self {
+    pub fn _from_cache(cache: NodeCache<'interner>) -> Self {
         Self {
             cache: cache,
             _phantom: PhantomData,
         }
     }
 
-    fn parse<'src, Err, Tok>(&mut self, _input: Input<'src>) -> Result<GreenNode, Err>
+    fn _parse<'src, Err, Tok>(&mut self, _input: Input<'src>) -> Result<GreenNode, Err>
     where
         Err: chumsky::error::Error<'src, &'src str> + 'src,
         Tok: Parseable<Syntax = Sy>,
