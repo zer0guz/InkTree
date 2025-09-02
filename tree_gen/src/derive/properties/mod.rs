@@ -2,7 +2,6 @@ mod delimiters;
 mod keyword;
 mod operator;
 mod padding;
-mod recursive;
 mod root;
 mod whitespace;
 
@@ -16,7 +15,6 @@ use syn::Meta;
 pub use delimiters::*;
 pub use operator::*;
 pub use padding::*;
-pub use recursive::Recursive;
 pub use root::*;
 
 use crate::{
@@ -39,7 +37,6 @@ pub enum Property {
     OpInfix(Infix),
     OpPostfix(Postfix),
     Root(Root),
-    Recursive(Recursive),
     Padded(Padded),
     PaddedBy(PaddedBy),
     DelimitedBy(DelimitedBy),
@@ -78,7 +75,6 @@ impl PropertyKind {
             Pk::PaddedBy => Ok(PaddedBy::from_meta(meta, None)?.into()),
             Pk::DelimitedBy => Ok(DelimitedBy::from_meta(meta, None)?.into()),
             Pk::Whitespace => Ok(Whitespace::from_meta(meta, None)?.into()),
-            Pk::Recursive => Ok(Recursive::from_meta(meta, None)?.into()),
         }
     }
 }

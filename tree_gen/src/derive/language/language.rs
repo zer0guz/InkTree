@@ -1,8 +1,9 @@
 use crate::{
-    derive::{attributes::SyntaxAttributeKind, language::element::LanguageElement},
-    language::rule_graph::RuleGraph,
+    derive::attributes::SyntaxAttributeKind,
+    language::rule_graph::{RecursionInfo, RuleGraph},
+    util::{Handle, Pool},
 };
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::HashSet;
 
 use proc_macro2::TokenStream;
 use snafu::{ResultExt, Snafu};
@@ -14,7 +15,7 @@ use quote::quote;
 use crate::{
     derive::{
         attributes::SyntaxAttribute,
-        language::{Element, ElementError},
+        language::{Element, ElementError, LanguageElement},
         properties::Operator,
     },
     error::Errors,
@@ -22,7 +23,7 @@ use crate::{
 };
 
 #[derive(Debug, Snafu)]
-pub enum LanguageError {
+pub enum Error {
     #[snafu(display(
         "attributes have to be provided by placing them into tree_gen() SCOPE TODO: {}",
         source
@@ -46,122 +47,24 @@ pub enum LanguageError {
     Element { source: ElementError },
 }
 
-pub struct Language {
-    pub elements: Vec<Element>,
+pub(crate) struct Language {
+    pub elements: Pool<Element>,
     pub ident: Ident,
     pub operators: Vec<Operator>,
     pub root_idents: Vec<Ident>,
-    pub idents: HashMap<String, Ident>,
+    pub idents: HashSet<Ident>,
     pub cycle_graph: RuleGraph,
+    pub recursion_info: Option<RecursionInfo>,
+    pub rules: Vec<Handle<Element>>,
 }
 
 impl Language {
-    pub fn from_input(input: DeriveInput) -> Result<Self, Errors<LanguageError>> {
-        let mut language = Self {
-            elements: Vec::with_capacity(input.attrs.len()),
-            ident: input.ident.clone(),
-            idents: HashMap::new(),
-            operators: vec![],
-            root_idents: vec![],
-            cycle_graph: RuleGraph::new(),
-        };
-
-        let mut repr = vec![];
-
-        input
-            .attrs
-            .iter()
-            .filter(|attr| {
-                if attr.path().is_ident("repr") {
-                    repr.push(*attr);
-                }
-                attr.path().is_ident("tree_gen")
-            })
-            .map(|attribute| {
-                language.handle_element(
-                    Element::from_attribute(&attribute).map_err(LanguageError::from)?,
-                )
-            })
-            .collect_either_flatten()?;
-
-        let repr_inner = repr
-            .into_iter()
-            .next()
-            .ok_or_else(|| syn::Error::new_spanned(&input, "todo text repr"))
-            .context(ReprSnafu)?
-            .parse_args_with(Ident::parse)
-            .context(ReprSnafu)?;
-
-        if !(repr_inner == "u32") {
-            return Err(syn::Error::new_spanned(repr_inner, "todo text repr2"))
-                .context(ReprSnafu)?;
-        };
-
-        let syn::Data::Enum(syntax) = &input.data else {
-            Err(syn::Error::new_spanned(&input, "oups")).context(DataSnafu)?
-        };
-
-        syntax
-            .variants
-            .iter()
-            .map(Element::from_variant)
-            .collect_either_flatten_into()?
-            .into_iter()
-            .flatten()
-            .map(|element| language.handle_element(element))
-            .collect_either_flatten()?;
-
-        Ok(language)
-    }
-
-    fn handle_element(&mut self, mut element: Element) -> Result<(), Errors<LanguageError>> {
-        let name = element.attribute.name();
-
-        match self.idents.entry(name.to_string()) {
-            Entry::Vacant(v) => {
-                v.insert(name.clone());
-            }
-            Entry::Occupied(_) => {
-                return Err(syn::Error::new_spanned(name, "duplicate ident"))
-                    .map_err(Errors::from)
-                    .map_err(Errors::map_errors);
-            }
-        }
-
+    fn handle_element(&mut self, element: Element) -> Result<(), Errors<Error>> {
         element.build(self).map_err(Errors::map_errors)?;
-
         self.elements.push(element);
 
+
         return Ok(());
-    }
-
-    pub fn codegen(self) -> Result<TokenStream, Errors<LanguageError>> {
-        // if self.cycle_graph.has_cycle() {
-        //     todo!("cycle")
-        // }
-        match self.root_idents.len() {
-            0 => Err(syn::Error::new_spanned(&self.ident, "no root todo text")),
-            1 => Ok(()),
-            _ => Err(syn::Error::new_spanned(
-                &self.root_idents[1],
-                "multiple roots todo text",
-            )),
-        }
-        .map_err(LanguageError::from)?;
-
-        let mut stream = TokenStream::new();
-
-        stream.extend(self.syntax_impl());
-
-        let variants_code = self
-            .elements
-            .iter()
-            .map(|variant| Ok(variant.codegen(&self)?))
-            .collect_either()?;
-
-        stream.extend(variants_code);
-
-        Ok(stream)
     }
 
     fn syntax_impl(&self) -> TokenStream {
@@ -252,6 +155,111 @@ impl Language {
             }
         }
     }
+}
+
+pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
+    let mut language = Language {
+        elements: Pool::with_capacity(input.attrs.len() as u32),
+        ident: input.ident.clone(),
+        idents: HashSet::new(),
+        operators: vec![],
+        root_idents: vec![],
+        cycle_graph: RuleGraph::new(),
+        recursion_info: None,
+        rules: vec![],
+    };
+
+    let mut repr = vec![];
+
+    input
+        .attrs
+        .iter()
+        .filter(|attr| {
+            if attr.path().is_ident("repr") {
+                repr.push(*attr);
+            }
+            attr.path().is_ident("tree_gen")
+        })
+        .map(|attribute| {
+            language.handle_element(Element::from_attribute(&attribute).map_err(Error::from)?)
+        })
+        .collect_either_flatten()?;
+
+    let repr_inner = repr
+        .into_iter()
+        .next()
+        .ok_or_else(|| syn::Error::new_spanned(&input, "todo text repr"))
+        .context(ReprSnafu)?
+        .parse_args_with(Ident::parse)
+        .context(ReprSnafu)?;
+
+    if !(repr_inner == "u32") {
+        return Err(syn::Error::new_spanned(repr_inner, "todo text repr2")).context(ReprSnafu)?;
+    };
+
+    let syn::Data::Enum(syntax) = &input.data else {
+        Err(syn::Error::new_spanned(&input, "oups")).context(DataSnafu)?
+    };
+
+    syntax
+        .variants
+        .iter()
+        .map(Element::from_variant)
+        .collect_either_flatten_into()?
+        .into_iter()
+        .flatten()
+        .map(|element| language.handle_element(element))
+        .collect_either_flatten()?;
+
+    let rules = language
+        .rules
+        .iter()
+        .map(|handle| {
+            let element = &language.elements[*handle];
+            let rule = element.rule().expect("comes from rules");
+            (rule.name.clone(), rule)
+        })
+        .collect();
+
+    language.recursion_info = Some(language.cycle_graph.recursive_info(&rules));
+
+    if language
+        .recursion_info
+        .as_ref()
+        .expect("bug")
+        .left_recursive
+        .len()
+        > 0
+    {
+        todo!("REEEE FIX YOUR LEFT RECURSION")
+    }
+
+    match language.root_idents.len() {
+        0 => Err(syn::Error::new_spanned(
+            &language.ident,
+            "no root todo text",
+        )),
+        1 => Ok(()),
+        _ => Err(syn::Error::new_spanned(
+            &language.root_idents[1],
+            "multiple roots todo text",
+        )),
+    }
+    .map_err(Error::from)?;
+
+    let mut stream = TokenStream::new();
+
+    stream.extend(language.syntax_impl());
+
+    let variants_code = language
+        .elements
+        .iter()
+        .map(|variant| Ok(variant.codegen(&language)?))
+        .collect_either()?;
+
+    stream.extend(variants_code);
+
+    Ok(stream)
 }
 
 pub fn struct_def(body: TokenStream, ident: &Ident) -> TokenStream {

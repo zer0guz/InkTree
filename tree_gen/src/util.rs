@@ -1,4 +1,8 @@
-use crate::error::Errors;
+use std::{marker::PhantomData, slice::Iter, vec::IntoIter};
+
+use derivative::Derivative;
+
+use crate::{error::Errors, language::Element};
 pub trait IteratorExt: Iterator {
     fn collect_either<T, E>(mut self) -> Result<Vec<T>, Errors<E>>
     where
@@ -74,4 +78,122 @@ where
         Either::Left(i) => i.next().map(Ok),
         Either::Right(e) => e.next().map(Err),
     })
+}
+
+pub struct Pool<T>(Vec<T>);
+
+impl<T> Pool<T> {
+    pub fn with_capacity(cap: u32) -> Self {
+        Self(Vec::with_capacity(cap as usize))
+    }
+
+    #[inline(always)]
+    pub fn push(&mut self, entry: T) -> Handle<T> {
+        let entry_handle = self.0.len() as u32;
+        self.0.push(entry);
+        Handle::<T>::new(entry_handle)
+    }
+
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn iter(&self) -> PoolIter<'_, T> {
+        PoolIter {
+            inner: self.0.iter().enumerate(),
+        }
+    }
+    pub fn len(&self) -> u32 {
+        self.0.len() as u32
+    }
+
+    pub fn next_handle(&self) -> Handle<T> {
+        Handle::new(self.len())
+    }
+
+    pub(crate) fn new() -> Self {
+        Self(Vec::<T>::new())
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug, Default, Clone, Copy, Hash, Eq, PartialEq)]
+pub struct Handle<T> {
+    idx: u32,
+    phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> Handle<T> {
+    #[inline(always)]
+    fn new(idx: u32) -> Self {
+        Self {
+            idx,
+            phantom: std::marker::PhantomData::<T> {},
+        }
+    }
+}
+
+impl<T> std::ops::Index<Handle<T>> for Pool<T> {
+    type Output = T;
+
+    #[inline(always)]
+    fn index(&self, handle: Handle<T>) -> &Self::Output {
+        self.0.get(handle.idx as usize).expect("pool error")
+    }
+}
+
+impl<T> std::ops::IndexMut<Handle<T>> for Pool<T> {
+    #[inline(always)]
+    fn index_mut(&mut self, handle: Handle<T>) -> &mut Self::Output {
+        self.0.get_mut(handle.idx as usize).expect("pool error")
+    }
+}
+
+pub struct PoolIntoIter<T> {
+    inner: std::iter::Enumerate<IntoIter<T>>,
+}
+
+impl<T> Iterator for PoolIntoIter<T> {
+    type Item = (Handle<T>, T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next()
+            .map(|(idx, item)| (Handle::new(idx as u32), item))
+    }
+}
+
+impl<T> IntoIterator for Pool<T> {
+    type Item = (Handle<T>, T);
+    type IntoIter = PoolIntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        PoolIntoIter {
+            inner: self.0.into_iter().enumerate(),
+        }
+    }
+}
+
+pub struct PoolIter<'a, T> {
+    inner: std::iter::Enumerate<Iter<'a, T>>,
+}
+
+impl<'a, T> Iterator for PoolIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(|(_, t)| t)
+    }
+}
+
+impl<'a, T> IntoIterator for &'a Pool<T> {
+    type Item = &'a T;
+    type IntoIter = PoolIter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        PoolIter {
+            inner: self.0.iter().enumerate(),
+        }
+    }
 }

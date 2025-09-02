@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use chumsky::Parser;
 use derive_more::From;
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{
     Ident, MetaList, Token,
     parse::{Parse, ParseStream},
@@ -15,100 +15,155 @@ use crate::{
     derive::{
         attributes::allowed::ALLOWED_RULE,
         language::struct_def,
-        parser::{DslExpr, FromMeta},
-        properties::{Property, PropertyKind, Recursive},
+        parser::{DslExpr, FromMeta, ParserCtx},
+        properties::{Property, PropertyKind},
     },
     language::{ElementError, Language, LanguageElement},
 };
 
 #[derive(Debug, From)]
-pub struct Rule {
-    pub dsl: DslExpr,
+pub(crate) struct Rule {
     pub name: Ident,
-    pub parameters: HashMap<String, Ident>,
-    pub is_recursive: bool,
+    pub parameters: HashSet<Ident>,
+    pub dsl: DslExpr,
 }
 
 impl Rule {
-    pub fn new(dsl: DslExpr, name: Ident, parameters: HashMap<String, Ident>) -> Self {
+    pub fn new(dsl: DslExpr, name: Ident, parameters: HashSet<Ident>) -> Self {
         Self {
-            dsl,
             name,
             parameters,
-            is_recursive: false,
+            dsl: dsl,
         }
     }
-
     pub fn parser_body(&self, language: &Language) -> TokenStream {
-        if self.is_recursive {
-            self.recursive_parser_body(language)
-        } else {
-            self.plain_parser_body(language)
-        }
+        // Always generate a stable anchor ident for this rule’s SCC
+        let anchor_ident = Ident::new(
+            &format!("{}_anchor", self.name.to_string().to_lowercase()),
+            self.name.span(),
+        );
+
+        let ctx = ParserCtx::new(
+            &language.idents,
+            &self.parameters,
+            language.recursion_info.as_ref().expect("no recusrion info"),
+            &self.name,
+            &anchor_ident,
+        );
+
+        self.dsl.parser(&ctx)
     }
-
-    fn plain_parser_body(&self, language: &Language) -> TokenStream {
-        let body = self.dsl.parser(&language.idents, &self.parameters, None);
-        quote! {
-            use ::tree_gen::chumsky::prelude::*;
-            use tree_gen::chumksy_ext::*;
-            #body
-        }
-    }
-    fn recursive_parser_body(&self, language: &Language) -> TokenStream {
-        let body = self
-            .dsl
-            .parser(&language.idents, &self.parameters, Some(&self.name));
-
-        quote! {
-            use ::tree_gen::chumsky::prelude::*;
-            use tree_gen::chumksy_ext::*;
-
-            recursive(|this| {
-                #body
-            })
-        }
-    }
-
-    pub fn parser(&self, language: &Language) -> TokenStream {
+    pub fn parser(&self, body: TokenStream, language: &Language, is_node: bool) -> TokenStream {
         let lang_ident = &language.ident;
-        let name = &self.name;
-        let body = self.parser_body(language);
+        let name_ident = &self.name;
+        let recursion_info = language.recursion_info.as_ref().expect("no recusrion info");
 
-        // Collect parameters for the parser fn signature
-        let param_idents: Vec<_> = self.parameters.values().collect();
+        let in_cycle = recursion_info.node_to_comp.contains_key(&self.name);
+        let anchor_ident = format_ident!("recursion_anchor");
 
-        // Generate each parameter declaration
-        let param_decls = param_idents.iter().map(|ident| {
-            quote! {
-                #ident: impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident> + Clone
-            }
-        });
+        // --- Collect declared generic params ---
+        let mut param_decls: Vec<TokenStream> = self
+            .parameters
+            .iter()
+            .map(|ident| {
+                quote! {
+                    #ident: impl ::tree_gen::chumksy_ext::BuilderParser<
+                        'src, 'cache, 'interner, (), Err, #lang_ident
+                    > + Clone + 'src
+                }
+            })
+            .collect();
 
-        quote! {
-            impl #name {
-                fn parser<'src, 'cache, 'interner, Err>(
-                    #(#param_decls),*
-                ) -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident> + Clone
+        // --- If in cycle, insert anchor param ---
+        if in_cycle {
+            param_decls.insert(
+                0,
+                quote! {
+                    #anchor_ident: impl ::tree_gen::chumksy_ext::BuilderParser<
+                        'src, 'cache, 'interner, (), Err, #lang_ident
+                    > + Clone + 'src
+                },
+            );
+            let function = quote! {
+                fn parser<'src, 'cache, 'interner, Err>()
+                    -> impl ::tree_gen::chumksy_ext::BuilderParser<
+                        'src, 'cache, 'interner, (), Err, #lang_ident> + Clone + 'src
                 where
                     Err: chumsky::error::Error<'src, &'src str> + 'src,
                     'cache: 'src,
                     'interner: 'cache,
                 {
-                    #body
+                    use ::tree_gen::chumsky::prelude::*;
+                    recursive(|#anchor_ident| {
+                        #name_ident::anchored_parser(#anchor_ident)
+                    })
+                }
+            };
+
+            let impl_code = if is_node {
+                quote! {
+                    impl ::tree_gen::Parseable for #name_ident {
+                        type Syntax = #lang_ident;
+                        #function
+                    }
+                }
+            } else {
+                quote! {
+                    impl #name_ident {
+                        #function
+                    }
+                }
+            };
+
+            quote! {
+                impl #name_ident {
+                    fn anchored_parser<'src, 'cache, 'interner, Err>(
+                        #(#param_decls),*
+                    ) -> impl ::tree_gen::chumksy_ext::BuilderParser<
+                        'src, 'cache, 'interner, (), Err, #lang_ident
+                    > + Clone
+                    where
+                        Err: chumsky::error::Error<'src, &'src str> + 'src,
+                        'cache: 'src,
+                        'interner: 'cache,
+                    {
+                        #body
+                    }
+                }
+                #impl_code
+
+            }
+        } else {
+            // acyclic rule → normal Parseable impl (still thread generics!)
+            let function = quote! {
+                fn parser<'src, 'cache, 'interner, Err>(#(#param_decls),*)
+                    -> impl ::tree_gen::chumksy_ext::BuilderParser<
+                            'src, 'cache, 'interner, (), Err, #lang_ident> + Clone + 'src
+                        where
+                            Err: chumsky::error::Error<'src, &'src str> + 'src,
+                            'cache: 'src,
+                            'interner: 'cache,
+                        {
+                            use ::tree_gen::chumsky::prelude::*;
+                            use tree_gen::chumksy_ext::*;
+                            #body
+                        }
+            };
+            if is_node {
+                quote! {
+                    impl ::tree_gen::Parseable for #name_ident {
+                        type Syntax = #lang_ident;
+                        #function
+                    }
+                }
+            } else {
+                quote! {
+                    impl #name_ident {
+                        #function
+                    }
                 }
             }
         }
-    }
-
-    fn dependencies(&self) -> std::collections::HashSet<String> {
-        let mut deps = std::collections::HashSet::new();
-        self.dsl.collect_deps(&mut deps);
-        // strip out parameter names (they’re not real rules)
-        for param in self.parameters.keys() {
-            deps.remove(param);
-        }
-        deps
     }
 }
 
@@ -126,15 +181,12 @@ impl Parse for Rule {
         // optional generic-like params: <x, y, z>
         let parameters = if input.peek(syn::Token![<]) {
             let _: syn::Token![<] = input.parse()?;
-            let params: syn::punctuated::Punctuated<syn::Ident, syn::Token![,]> =
+            let params: Punctuated<syn::Ident, syn::Token![,]> =
                 Punctuated::parse_separated_nonempty(&input)?;
             let _: syn::Token![>] = input.parse()?;
-            params
-                .into_iter()
-                .map(|ident| (ident.to_string(), ident))
-                .collect()
+            params.into_iter().collect()
         } else {
-            std::collections::HashMap::new()
+            HashSet::new()
         };
 
         // expect '='
@@ -146,6 +198,7 @@ impl Parse for Rule {
             .parse(rhs.as_str())
             .into_result()
             .map_err(|_| syn::Error::new(rhs.span(), "failed to lex DSL"))?;
+
         let dsl = crate::derive::parser::dsl_parser()
             .parse(&tokens)
             .into_result()
@@ -156,7 +209,6 @@ impl Parse for Rule {
             dsl,
             name,
             parameters,
-            is_recursive: false,
         })
     }
 }
@@ -166,7 +218,7 @@ impl LanguageElement for Rule {
         let def_body = quote! {};
         let def = struct_def(def_body, &self.name);
 
-        let parser = self.parser(&language);
+        let parser = self.parser(self.parser_body(&language), &language, false);
 
         Ok(quote! {
             #def
@@ -182,16 +234,22 @@ impl LanguageElement for Rule {
     }
 
     fn build(
-        &mut self,
-        properties: &Vec<Property>,
+        &self,
+        _properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {
-        if properties.contains(&Property::Recursive(Recursive)) {
-            self.is_recursive = true;
-        };
         // Insert into dependency graph
-        let deps = self.dependencies();
-        language.cycle_graph.add_deps(self.name.to_string(), deps);
+
+        let self_handle = language.elements.next_handle();
+        language.rules.push(self_handle);
+
+        let mut deps = std::collections::HashSet::new();
+        self.dsl.collect_deps(&self.parameters, &mut deps);
+        for param in &self.parameters {
+            deps.remove(param);
+        }
+
+        language.cycle_graph.add_rule(self.name.clone(), deps);
 
         Ok(())
     }

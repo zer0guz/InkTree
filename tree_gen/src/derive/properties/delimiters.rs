@@ -12,7 +12,7 @@ pub struct DelimitedBy {
 }
 
 impl DelimitedBy {
-    pub fn parser(&self, inner: &TokenStream) -> TokenStream {
+    pub fn _parser(&self, inner: &TokenStream) -> TokenStream {
         let Self { open, close } = self;
 
         quote! {#inner.padded_by(#open::parser(),#close::parser())}

@@ -9,6 +9,6 @@ mod token;
 pub use attributes::*;
 pub use node::*;
 pub use pratt::*;
-pub use rule::*;
+pub(crate) use rule::*;
 pub use static_token::*;
 pub use token::*;

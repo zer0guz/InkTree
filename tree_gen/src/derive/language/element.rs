@@ -1,3 +1,7 @@
+
+use crate::
+    derive::attributes::*
+;
 use enum_dispatch::enum_dispatch;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
@@ -8,7 +12,7 @@ use syn::{Attribute, Ident, Meta, MetaList, Variant, punctuated::Punctuated, tok
 use crate::{
     Errors,
     derive::{
-        attributes::*,
+        attributes::SyntaxAttribute,
         properties::{Property, PropertyKind, Root},
     },
     language::Language,
@@ -106,7 +110,20 @@ impl Element {
         })
     }
 
-    pub fn build(&mut self, language: &mut Language) -> Result<(), Errors<ElementError>> {
+    pub fn build(&self, language: &mut Language) -> Result<(), Errors<ElementError>> {
+        let name = self.attribute.name().clone();
+
+        if language
+            .elements
+            .iter()
+            .find(|a| a.attribute.name() == &name)
+            .is_some()
+        {
+            todo!("error todo redefined")
+        };
+
+        language.idents.insert(name);
+
         self.properties
             .iter()
             .map(|prop| {
@@ -122,11 +139,12 @@ impl Element {
             })
             .collect_either()?;
 
-        self.attribute.build(&self.properties, language)?;
-
         if self.properties.contains(&Property::Root(Root)) {
             language.root_idents.push(self.attribute.name().clone());
         };
+
+        self.attribute.build(&self.properties, language)?;
+
 
         return Ok(());
     }
@@ -134,17 +152,22 @@ impl Element {
     pub fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
         Ok(self.attribute.codegen(language)?)
     }
+
+    pub fn rule(&self) -> Option<&Rule> {
+        match &self.attribute {
+            SyntaxAttribute::Rule(rule) => Some(rule),
+            SyntaxAttribute::Node(node) => Some(&node.0),
+            SyntaxAttribute::Pratt(pratt) => Some(&pratt.node.0),
+            _=> None
+        }
+    }
 }
 
 #[enum_dispatch]
 pub trait LanguageElement: Sized {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError>;
 
-    fn build(
-        &mut self,
-        _properties: &Vec<Property>,
-        _language: &mut Language,
-    ) -> Result<(), ElementError> {
+    fn build(&self, _properties: &Vec<Property>, _language: &mut Language) -> Result<(), ElementError> {
         Ok(())
     }
 

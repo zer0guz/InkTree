@@ -5,7 +5,7 @@ use syn::{Ident, MetaList};
 use crate::{
     derive::{
         attributes::{Node, allowed::ALLOWED_PRATT},
-        language::{parseable_impl, struct_def},
+        language::struct_def,
         parser::FromMeta,
         properties::{Operator, Property, PropertyKind},
     },
@@ -20,29 +20,28 @@ pub struct Pratt {
 impl Pratt {
     pub fn code(&self, language: &Language) -> TokenStream {
         let lang_ident = &language.ident;
-        let name = &self.name();
+        let name_ident = &self.name();
+
+        // base body from Rule
+        let base_body = self.node.0.parser_body(language);
 
         let operators = &language.operators;
-
-        let atom_body = &self.node.parser_body(language);
-
         let pratt_ops = Self::pratt_table(&self, lang_ident, operators);
 
-        let body = quote! {#atom_body.with_cp().pratt(#pratt_ops)};
+        let wrapped_body = quote! {
+            #base_body.with_cp().pratt(#pratt_ops)
+        };
 
-        let parser = quote! {
+        let final_body = quote! {
             use ::tree_gen::chumsky::prelude::*;
             use ::tree_gen::engine::Builder;
             use ::tree_gen::chumksy_ext::*;
             use ::tree_gen::chumsky::pratt::*;
-            #body.boxed().wrap_cp(#lang_ident::#name)
+            #wrapped_body.boxed().wrap_cp(#lang_ident::#name_ident)
         };
 
-        let parseable_impl = parseable_impl(parser, name, lang_ident);
-
-        quote! {
-            #parseable_impl
-        }
+        // delegate to Rule’s impl wrapper
+        self.node.0.parser(final_body, language, true)
     }
 
     fn pratt_table(&self, lang_ident: &Ident, operators: &Vec<Operator>) -> TokenStream {
@@ -87,11 +86,10 @@ impl LanguageElement for Pratt {
     }
 
     fn build(
-        &mut self,
+        &self,
         properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {
-        self.node.build(properties, language)?;
-        Ok(())
+        self.node.build(properties, language)
     }
 }

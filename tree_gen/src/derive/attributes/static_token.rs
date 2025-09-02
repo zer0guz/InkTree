@@ -74,7 +74,7 @@ impl LanguageElement for StaticToken {
     }
 
     fn build(
-        &mut self,
+        &self,
         properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {

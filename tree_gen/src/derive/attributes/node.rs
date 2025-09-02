@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use chumsky::Parser;
 use derive_more::From;
@@ -9,7 +9,7 @@ use syn::{Ident, MetaList};
 use crate::{
     derive::{
         attributes::{allowed::ALLOWED_NODE, rule::Rule},
-        language::{parseable_impl, struct_def},
+        language::struct_def,
         parser::{FromMeta, dsl_lexer, dsl_parser},
         properties::{Property, PropertyKind},
     },
@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[derive(Debug, From)]
-pub struct Node(Rule);
+pub struct Node(pub Rule);
 
 impl Node {
     pub fn from_string(input: String, name: &Ident) -> Result<Self, syn::Error> {
@@ -30,43 +30,23 @@ impl Node {
             .into_result()
             .expect("parser error todo")
             .into();
-        Ok(Self(Rule::new(dsl, name.clone(), HashMap::new())))
+        Ok(Self(Rule::new(dsl, name.clone(), HashSet::new())))
     }
 
     pub fn parser(&self, language: &Language) -> TokenStream {
-        let body = self.0.parser_body(language);
         let lang_ident = &language.ident;
-        let name = &self.name();
+        let name_ident = &self.name();
 
-        let mut parser = quote! {
-            use ::tree_gen::chumsky::prelude::*;
-            use tree_gen::chumksy_ext::*;
-            #body
+        // base body from Rule
+        let base_body = self.0.parser_body(language);
+
+        // tack on `.as_node(..)`
+        let wrapped_body = quote! {
+            #base_body.as_node(#lang_ident::#name_ident)
         };
-        parser = quote! {#parser.as_node(#lang_ident::#name)};
 
-        parseable_impl(parser, name, lang_ident)
-    }
-
-    pub fn recursive_parser_body(&self, language: &Language) -> TokenStream {
-        let lang_ident = &language.ident;
-        let name = &self.name();
-
-        // Generate body with substitution: self.0.dsl where references to self.name use `this.clone()`
-        let body = self.0.parser_body(&language);
-
-        quote! {
-            use ::tree_gen::chumsky::prelude::*;
-            use tree_gen::chumksy_ext::*;
-
-            recursive(|this| {
-                #body
-            }).as_node(#lang_ident::#name)
-        }
-    }
-
-    pub fn parser_body(&self, language: &Language) -> TokenStream {
-        self.0.parser_body(language)
+        // delegate to Rule’s impl wrapper
+        self.0.parser(wrapped_body, language, true)
     }
 }
 
@@ -102,11 +82,10 @@ impl LanguageElement for Node {
     }
 
     fn build(
-        &mut self,
+        &self,
         properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {
-        self.0.build(properties, language)?;
-        Ok(())
+        self.0.build(properties, language)
     }
 }
