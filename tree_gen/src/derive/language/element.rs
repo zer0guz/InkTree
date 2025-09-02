@@ -1,7 +1,4 @@
-
-use crate::
-    derive::attributes::*
-;
+use crate::derive::attributes::*;
 use enum_dispatch::enum_dispatch;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
@@ -145,7 +142,6 @@ impl Element {
 
         self.attribute.build(&self.properties, language)?;
 
-
         return Ok(());
     }
 
@@ -158,7 +154,7 @@ impl Element {
             SyntaxAttribute::Rule(rule) => Some(rule),
             SyntaxAttribute::Node(node) => Some(&node.0),
             SyntaxAttribute::Pratt(pratt) => Some(&pratt.node.0),
-            _=> None
+            _ => None,
         }
     }
 }
@@ -167,7 +163,11 @@ impl Element {
 pub trait LanguageElement: Sized {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError>;
 
-    fn build(&self, _properties: &Vec<Property>, _language: &mut Language) -> Result<(), ElementError> {
+    fn build(
+        &self,
+        _properties: &Vec<Property>,
+        _language: &mut Language,
+    ) -> Result<(), ElementError> {
         Ok(())
     }
 

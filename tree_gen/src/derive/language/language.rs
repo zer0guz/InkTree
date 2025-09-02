@@ -63,7 +63,6 @@ impl Language {
         element.build(self).map_err(Errors::map_errors)?;
         self.elements.push(element);
 
-
         return Ok(());
     }
 

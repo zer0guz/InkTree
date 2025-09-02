@@ -1,8 +1,8 @@
-use std::{marker::PhantomData, slice::Iter, vec::IntoIter};
+use std::{slice::Iter, vec::IntoIter};
 
 use derivative::Derivative;
 
-use crate::{error::Errors, language::Element};
+use crate::error::Errors;
 pub trait IteratorExt: Iterator {
     fn collect_either<T, E>(mut self) -> Result<Vec<T>, Errors<E>>
     where
@@ -110,10 +110,6 @@ impl<T> Pool<T> {
 
     pub fn next_handle(&self) -> Handle<T> {
         Handle::new(self.len())
-    }
-
-    pub(crate) fn new() -> Self {
-        Self(Vec::<T>::new())
     }
 }
 

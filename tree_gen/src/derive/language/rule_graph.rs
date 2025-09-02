@@ -446,4 +446,63 @@ mod tests {
 
         assert!(info.is_left_recursive(&a_ident));
     }
+
+    #[test]
+    fn test_mutual_param_recursion_rule() {
+        // A<T> = B<T>
+        // B<U> = A<U>
+        let a_ident = ident("A");
+        let b_ident = ident("B");
+
+        let rules = make_rules(vec![
+            (
+                "A",
+                DslExpr::Call {
+                    name: b_ident.clone(),
+                    args: vec![just("T")],
+                },
+            ),
+            (
+                "B",
+                DslExpr::Call {
+                    name: a_ident.clone(),
+                    args: vec![just("U")],
+                },
+            ),
+        ]);
+
+        let mut rg = RuleGraph::new();
+        rg.add_rule(a_ident.clone(), [b_ident.clone()].into_iter().collect());
+        rg.add_rule(b_ident.clone(), [a_ident.clone()].into_iter().collect());
+
+        let info = rg.recursive_info(&wrap(&rules));
+
+        assert!(info.is_left_recursive(&a_ident));
+        assert!(info.is_left_recursive(&b_ident));
+        assert_eq!(info.components.len(), 1); // both in same SCC
+    }
+
+    #[test]
+    fn test_guarded_param_recursion_not_left() {
+        // A<T> = t A<T>  (right recursion, safe)
+        let a_ident = ident("A");
+
+        let rules = make_rules(vec![(
+            "A",
+            DslExpr::Seq(vec![
+                just("t"),
+                DslExpr::Call {
+                    name: a_ident.clone(),
+                    args: vec![just("T")],
+                },
+            ]),
+        )]);
+
+        let mut rg = RuleGraph::new();
+        rg.add_rule(a_ident.clone(), [a_ident.clone()].into_iter().collect());
+
+        let info = rg.recursive_info(&wrap(&rules));
+
+        assert!(!info.is_left_recursive(&a_ident));
+    }
 }
