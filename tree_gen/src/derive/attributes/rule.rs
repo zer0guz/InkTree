@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use chumsky::Parser;
 use derive_more::From;
+use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
@@ -36,162 +37,75 @@ impl Rule {
         }
     }
     pub fn parser_body(&self, language: &Language) -> TokenStream {
-        // Always generate a stable anchor ident for this rule’s SCC
-        let anchor_ident = Ident::new(
-            &format!("{}_anchor", self.name.to_string().to_lowercase()),
-            self.name.span(),
-        );
-        let ctx = ParserCtx::new(
-            &language.idents,
-            &self.parameters,
-            language.recursion_info.as_ref().expect("no recusrion info"),
-            &self.name,
-            &anchor_ident,
-        );
+        let recursion_info = language.recursion_info.as_ref().expect("no recursion info");
+
+        let anchored = if let Some(&comp_idx) = recursion_info.node_to_comp.get(&self.name) {
+            let comp = &recursion_info.components[comp_idx];
+
+            let deps = recursion_info
+                .adj
+                .get(&self.name)
+                .cloned()
+                .unwrap_or_default();
+
+            deps.into_iter().filter(|d| comp.contains(d)).collect()
+        } else {
+            HashSet::new()
+        };
+
+        let ctx = ParserCtx::new(&language.idents, &self.parameters, anchored);
 
         self.dsl.parser(&ctx)
     }
-    pub fn parser(&self, body: TokenStream, language: &Language, is_node: bool) -> TokenStream {
+    pub fn parser(&self, body: TokenStream, language: &Language) -> TokenStream {
         let lang_ident = &language.ident;
         let name_ident = &self.name;
         let recursion_info = language.recursion_info.as_ref().expect("no recursion info");
 
         let in_cycle = recursion_info.node_to_comp.contains_key(&self.name);
 
-        // collect declared generic params
-        let mut param_decls: Vec<TokenStream> = self
-            .parameters
-            .iter()
-            .map(|ident| {
-                quote! {
-                    #ident: impl ::tree_gen::chumksy_ext::BuilderParser<
-                        'src, 'cache, 'interner, (), Err, #lang_ident
-                    > + Clone + 'src
-                }
-            })
-            .collect();
+        // collect declared params
+        let param_idents: Vec<_> = self.parameters.iter().collect();
 
         if in_cycle {
-            // ---------------------------
-            // 1. Anchored parser signature: take deps from the SCC
-            // ---------------------------
-            // Get this rule's SCC index
+            // build peer + anchor info from SCC
             let comp_idx = recursion_info.node_to_comp[&self.name];
-            let comp: Vec<Ident> = recursion_info.components[comp_idx]
-                .iter()
-                .map(|ident| {
-                    Ident::new(ident.to_string().to_lowercase().as_str(), Span::call_site())
-                })
-                .collect();
+            let peers = &recursion_info.components[comp_idx];
 
-            // Build params for each peer dependency in SCC (excluding self)
-            let dep_params: Vec<TokenStream> = comp
+            let peer_anchors: Vec<TokenStream> = peers
                 .iter()
-                .filter(|n| *n != &self.name)
                 .map(|peer| {
-                    let peer_ident = peer;
-                    quote! {
-                        #peer_ident: impl ::tree_gen::chumksy_ext::BuilderParser<
-                            'src, 'cache, 'interner, (), Err, #lang_ident
-                        > + Clone + 'src
-                    }
+                    // find edges of this peer inside SCC
+                    let used_edges = recursion_info
+                        .adj
+                        .get(peer)
+                        .into_iter()
+                        .flatten()
+                        .filter(|edge| peers.contains(edge));
+
+                    // wrap as Peer( …anchors… )
+                    quote!( #peer( #(#used_edges),* ) )
                 })
                 .collect();
 
-            // prepend those to declared generics
-            param_decls.splice(0..0, dep_params);
-
-            let anchored_fn = quote! {
-                fn anchored_parser<'src, 'cache, 'interner, Err>(
-                    #(#param_decls),*
-                ) -> impl ::tree_gen::chumksy_ext::BuilderParser<
-                    'src, 'cache, 'interner, (), Err, #lang_ident
-                > + Clone
-                where
-                    Err: chumsky::error::Error<'src, &'src str> + 'src,
-                    'cache: 'src,
-                    'interner: 'cache,
-                {
-                    #body
-                }
-            };
-
-            // ---------------------------
-            // 2. Parser impl using Recursive::declare/define
-            // ---------------------------
-            let parser_fn = quote! {
-                fn parser<'src, 'cache, 'interner, Err>()
-                    -> impl ::tree_gen::chumksy_ext::BuilderParser<
-                        'src, 'cache, 'interner, (), Err, #lang_ident> + Clone + 'src
-                where
-                    Err: chumsky::error::Error<'src, &'src str> + 'src,
-                    'cache: 'src,
-                    'interner: 'cache,
-                {
-                    use ::tree_gen::chumsky::prelude::*;
-                    use ::tree_gen::chumsky::recursive::Recursive;
-
-                    // one declare for each SCC member
-                    #( let mut #comp = Recursive::declare(); )*
-
-                    // define each
-                    #( #comp.define(#comp::anchored_parser(/* pass deps here */)); )*
-
-                    // return this one’s handle
-                    #name_ident
-                }
-            };
-
-            let impl_code = if is_node {
-                quote! {
-                    impl ::tree_gen::Parseable for #name_ident {
-                        type Syntax = #lang_ident;
-                        #parser_fn
-                    }
-                }
-            } else {
-                quote! {
-                    impl #name_ident {
-                        #parser_fn
-                    }
-                }
-            };
+            let used_anchors = recursion_info
+                .adj
+                .get(&self.name)
+                .into_iter()
+                .flatten()
+                .filter(|peer| peers.contains(peer)) // only keep peers in this SCC
+                .map(|peer| Ident::new(&peer.to_string().to_lowercase(), Span::call_site()))
+                .collect_vec();
 
             quote! {
                 impl #name_ident {
-                    #anchored_fn
+                    tree_gen::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
+                    tree_gen::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
                 }
-                #impl_code
             }
         } else {
-            // acyclic rule (unchanged)
-            let function = quote! {
-                fn parser<'src, 'cache, 'interner, Err>(#(#param_decls),*)
-                    -> impl ::tree_gen::chumksy_ext::BuilderParser<
-                            'src, 'cache, 'interner, (), Err, #lang_ident> + Clone + 'src
-                        where
-                            Err: chumsky::error::Error<'src, &'src str> + 'src,
-                            'cache: 'src,
-                            'interner: 'cache,
-                        {
-                            use ::tree_gen::chumsky::prelude::*;
-                            use tree_gen::chumksy_ext::*;
-                            #body
-                        }
-            };
-            if is_node {
-                quote! {
-                    impl ::tree_gen::Parseable for #name_ident {
-                        type Syntax = #lang_ident;
-                        #function
-                    }
-                }
-            } else {
-                quote! {
-                    impl #name_ident {
-                        #function
-                    }
-                }
+            quote! {
+                rule!(#lang_ident::#name_ident,[#(#param_idents),*],{#body});
             }
         }
     }
@@ -245,13 +159,10 @@ impl Parse for Rule {
 
 impl LanguageElement for Rule {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
-        let ident = &self.name;
-        let lang_ident = &language.ident;
-
-        let parser = self.parser_body(&language);
+        let parser = self.parser(self.parser_body(&language), &language);
 
         Ok(quote! {
-            rule!(#lang_ident::#ident,[],{#parser});
+            #parser
         })
     }
     fn allowed(&self) -> &'static [PropertyKind] {

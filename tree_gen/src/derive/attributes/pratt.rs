@@ -40,7 +40,7 @@ impl Pratt {
         };
 
         // delegate to Rule’s impl wrapper
-        self.node.0.parser(final_body, language, true)
+        self.node.0.parser(final_body, language)
     }
 
     fn pratt_table(&self, lang_ident: &Ident, operators: &Vec<Operator>) -> TokenStream {

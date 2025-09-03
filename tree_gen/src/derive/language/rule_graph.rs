@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    mem,
+};
 use syn::Ident;
 
 use crate::derive::attributes::Rule;
@@ -11,6 +14,7 @@ pub struct RecursionInfo {
     pub components: Vec<HashSet<Ident>>,
     pub node_to_comp: HashMap<Ident, usize>,
     pub left_recursive: HashSet<Ident>,
+    pub adj: HashMap<Ident, HashSet<Ident>>,
 }
 
 impl RecursionInfo {
@@ -36,7 +40,7 @@ impl RuleGraph {
         self.adj.entry(name).or_default().extend(deps);
     }
 
-    pub(crate) fn recursive_info(&self, rules: &HashMap<Ident, &Rule>) -> RecursionInfo {
+    pub(crate) fn into_recursive_info(&mut self, rules: &HashMap<Ident, &Rule>) -> RecursionInfo {
         let (components, node_to_comp) = compute_sccs(&self.adj);
         let left_recursive = self.detect_left_recursion(rules);
 
@@ -44,6 +48,7 @@ impl RuleGraph {
             components,
             node_to_comp,
             left_recursive,
+            adj: mem::take(&mut self.adj),
         }
     }
 
@@ -246,8 +251,8 @@ mod tests {
             ("B", just("C")),
             ("C", just("t")), // terminal
         ]);
-        let rg = RuleGraph::new();
-        let info = rg.recursive_info(&wrap(&rules));
+        let mut rg = RuleGraph::new();
+        let info = rg.into_recursive_info(&wrap(&rules));
         assert!(info.components.is_empty());
         assert!(info.left_recursive.is_empty());
     }
@@ -260,7 +265,7 @@ mod tests {
         )]);
         let mut rg = RuleGraph::new();
         rg.add_rule(ident("A"), [ident("A")].into_iter().collect());
-        let info = rg.recursive_info(&wrap(&rules));
+        let info = rg.into_recursive_info(&wrap(&rules));
         assert!(info.is_left_recursive(&ident("A")));
     }
 
@@ -270,7 +275,7 @@ mod tests {
         let rules = make_rules(vec![("A", DslExpr::Seq(vec![just("t"), just("A")]))]);
         let mut rg = RuleGraph::new();
         rg.add_rule(ident("A"), [ident("A")].into_iter().collect());
-        let info = rg.recursive_info(&wrap(&rules));
+        let info = rg.into_recursive_info(&wrap(&rules));
         assert!(!info.is_left_recursive(&ident("A")));
     }
 
@@ -282,7 +287,7 @@ mod tests {
         let mut rg = RuleGraph::new();
         rg.add_rule(ident("A"), [ident("B")].into_iter().collect());
         rg.add_rule(ident("B"), [ident("A")].into_iter().collect());
-        let info = rg.recursive_info(&wrap(&rules));
+        let info = rg.into_recursive_info(&wrap(&rules));
         assert!(info.is_left_recursive(&ident("A")));
         assert!(info.is_left_recursive(&ident("B")));
         assert_eq!(info.components.len(), 1); // one SCC
@@ -302,7 +307,7 @@ mod tests {
         rg.add_rule(ident("A"), [ident("B")].into_iter().collect());
         rg.add_rule(ident("B"), [ident("C")].into_iter().collect());
         rg.add_rule(ident("C"), [ident("A")].into_iter().collect());
-        let info = rg.recursive_info(&wrap(&rules));
+        let info = rg.into_recursive_info(&wrap(&rules));
         assert!(info.is_left_recursive(&ident("A")));
         assert!(info.is_left_recursive(&ident("B")));
         assert!(info.is_left_recursive(&ident("C")));
@@ -320,7 +325,7 @@ mod tests {
         )]);
         let mut rg = RuleGraph::new();
         rg.add_rule(ident("A"), [ident("A")].into_iter().collect());
-        let info = rg.recursive_info(&wrap(&rules));
+        let info = rg.into_recursive_info(&wrap(&rules));
         assert!(info.is_left_recursive(&ident("A")));
     }
 
@@ -335,7 +340,7 @@ mod tests {
         let mut rg = RuleGraph::new();
         rg.add_rule(ident("A"), [ident("B")].into_iter().collect());
         rg.add_rule(ident("B"), [ident("B")].into_iter().collect());
-        let info = rg.recursive_info(&wrap(&rules));
+        let info = rg.into_recursive_info(&wrap(&rules));
         assert!(!info.is_left_recursive(&ident("A"))); // safe
         assert!(info.is_left_recursive(&ident("B"))); // left-recursive self
     }
@@ -356,7 +361,7 @@ mod tests {
 
         let mut rg = RuleGraph::new();
         rg.add_rule(a_ident.clone(), [a_ident.clone()].into_iter().collect());
-        let info = rg.recursive_info(&wrap(&rules));
+        let info = rg.into_recursive_info(&wrap(&rules));
 
         assert!(info.is_left_recursive(&a_ident));
     }
@@ -388,7 +393,7 @@ mod tests {
         rg.add_rule(a_ident.clone(), [b_ident.clone()].into_iter().collect());
         rg.add_rule(b_ident.clone(), [a_ident.clone()].into_iter().collect());
 
-        let info = rg.recursive_info(&wrap(&rules));
+        let info = rg.into_recursive_info(&wrap(&rules));
 
         assert!(info.is_left_recursive(&a_ident));
         assert!(info.is_left_recursive(&b_ident));
@@ -441,8 +446,8 @@ mod tests {
 
         // Left-recursion detection only depends on the left-corner graph built from `rules`,
         // so we don't need to add edges to RuleGraph.adj for this assertion.
-        let rg = RuleGraph::new();
-        let info = rg.recursive_info(&wrap(&rules));
+        let mut rg = RuleGraph::new();
+        let info = rg.into_recursive_info(&wrap(&rules));
 
         assert!(info.is_left_recursive(&a_ident));
     }
@@ -475,7 +480,7 @@ mod tests {
         rg.add_rule(a_ident.clone(), [b_ident.clone()].into_iter().collect());
         rg.add_rule(b_ident.clone(), [a_ident.clone()].into_iter().collect());
 
-        let info = rg.recursive_info(&wrap(&rules));
+        let info = rg.into_recursive_info(&wrap(&rules));
 
         assert!(info.is_left_recursive(&a_ident));
         assert!(info.is_left_recursive(&b_ident));
@@ -501,7 +506,7 @@ mod tests {
         let mut rg = RuleGraph::new();
         rg.add_rule(a_ident.clone(), [a_ident.clone()].into_iter().collect());
 
-        let info = rg.recursive_info(&wrap(&rules));
+        let info = rg.into_recursive_info(&wrap(&rules));
 
         assert!(!info.is_left_recursive(&a_ident));
     }

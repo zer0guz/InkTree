@@ -101,16 +101,18 @@ macro_rules! rule {
     };
 
     // cyclic (SCC): extra list of peers
-    ($lang_name:ident :: $name:ident, [$($arg:ident),*], $body:block, cycle [$($peer:ident),+]) => {
-        struct $name;
-        impl $name {
-            // anchored_parser with deps
-            $crate::make_anchored_parser!($lang_name, [$($peer),*], [$($arg),*], $body);
+    ($lang_name:ident :: $name:ident, [$($arg:ident),*], $body:block, [$($peer:ident ( $( $anchor:ident ),* ) ),+]) => {
+    struct $name;
+    impl $name {
+        // 1. define the anchored_parser
+        $crate::make_anchored_parser!($lang_name, [$($peer),*], [$($arg),*], $body);
 
-            // recursive parser that wires up SCC
-            $crate::make_recursive_parser!($lang_name, $name, [$($peer),*]);
-        }
-    };
+        // 2. define the recursive parser just for `$name`,
+        //    but include all peers + their anchors
+        $crate::make_recursive_parser!($lang_name, $name, [$($peer ( $( $anchor ),* ) ),+]);
+    }
+};
+
 }
 
 #[macro_export]

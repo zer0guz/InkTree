@@ -211,7 +211,7 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
         })
         .collect();
 
-    language.recursion_info = Some(language.cycle_graph.recursive_info(&rules));
+    language.recursion_info = Some(language.cycle_graph.into_recursive_info(&rules));
 
     if language
         .recursion_info

@@ -5,7 +5,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{chumsky::prelude::*, derive::attributes::Rule, language::rule_graph::RecursionInfo};
+use crate::{chumsky::prelude::*, derive::attributes::Rule};
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum DslExpr {
@@ -54,25 +54,19 @@ impl<'a> CallShape<'a> {
 pub struct ParserCtx<'a> {
     pub idents: &'a HashSet<Ident>,
     pub parameters: &'a HashSet<Ident>,
-    pub recursion_info: &'a RecursionInfo,
-    pub current_rule: &'a Ident,
-    pub anchor_ident: &'a Ident,
+    pub anchored: HashSet<Ident>,
 }
 
 impl<'a> ParserCtx<'a> {
     pub fn new(
         idents: &'a HashSet<Ident>,
         parameters: &'a HashSet<Ident>,
-        recursion_info: &'a RecursionInfo,
-        current_rule: &'a Ident,
-        anchor_ident: &'a Ident,
+        anchored: HashSet<Ident>,
     ) -> Self {
         Self {
             idents,
             parameters,
-            recursion_info,
-            current_rule,
-            anchor_ident,
+            anchored,
         }
     }
 }
@@ -125,17 +119,9 @@ impl DslExpr {
     }
 
     fn call_parser(name: &Ident, arg_tokens: &[TokenStream], ctx: &ParserCtx) -> TokenStream {
-        let cur = ctx.current_rule;
-
-        if let Some(&comp) = ctx.recursion_info.node_to_comp.get(name) {
-            // also find which component current_rule belongs to
-            let cur_comp = ctx.recursion_info.node_to_comp.get(&cur).copied();
-
-            if Some(comp) == cur_comp {
-                let anchor_ident = ctx.anchor_ident;
-                // self → just use the anchor
-                return quote! { #anchor_ident };
-            }
+        if ctx.anchored.contains(name) {
+            let ident = Ident::new(&name.to_string().to_lowercase(), Span::call_site());
+            return quote! { #ident };
         }
 
         // ---- not in same SCC ----
