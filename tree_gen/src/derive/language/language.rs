@@ -93,7 +93,6 @@ impl Language {
             .collect();
         let ident = &self.ident;
         let variant_count = self.elements.len() as u32;
-        let root = &self.root_idents[0];
         quote! {
             impl ::tree_gen::cstree::Syntax for #ident {
                 fn from_raw(raw: tree_gen::cstree::RawSyntaxKind) -> Self {
@@ -110,14 +109,6 @@ impl Language {
             }
 
             impl ::tree_gen::Syntax for #ident {
-                const ROOT: &'static Self = &#ident::#root;
-
-                const STATIC_TOKENS: &'static [Self] = &[];
-
-                const NODES: &'static [Self] = &[];
-
-                const TOKENS: &'static [Self] = &[];
-
                 fn from_raw(raw: ::tree_gen::cstree::RawSyntaxKind) -> Self {
                     assert!(raw.0 < #variant_count, "Invalid raw syntax kind: {}", raw.0);
                     // Safety: discriminant is valid by the assert above
@@ -259,31 +250,4 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
     stream.extend(variants_code);
 
     Ok(stream)
-}
-
-pub fn struct_def(body: TokenStream, ident: &Ident) -> TokenStream {
-    quote! {
-        struct #ident {
-            #body
-        }
-    }
-}
-
-pub fn parseable_impl(parser: TokenStream, ident: &Ident, lang_ident: &Ident) -> TokenStream {
-    quote! {
-        impl ::tree_gen::Parseable for #ident {
-            type Syntax = TestLang;
-
-            fn parser<'src, 'cache, 'interner, Err>()
-            -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, #lang_ident> + Clone
-            where
-                Err: chumsky::error::Error<'src, &'src str> + 'src,
-
-                'cache: 'src,
-                'interner: 'cache,
-            {
-                #parser
-            }
-        }
-    }
 }

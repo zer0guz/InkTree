@@ -1,11 +1,6 @@
 use crate::chumksy_ext::{BuilderParser, Input};
 
 pub trait Syntax: cstree::Syntax + 'static {
-    const ROOT: &'static Self;
-    const STATIC_TOKENS: &'static [Self];
-    const NODES: &'static [Self];
-    const TOKENS: &'static [Self];
-
     fn static_text(self) -> Option<&'static str>;
 
     fn from_raw(raw: cstree::RawSyntaxKind) -> Self;

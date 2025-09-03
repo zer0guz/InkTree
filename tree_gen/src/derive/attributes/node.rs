@@ -9,7 +9,6 @@ use syn::{Ident, MetaList};
 use crate::{
     derive::{
         attributes::{allowed::ALLOWED_NODE, rule::Rule},
-        language::struct_def,
         parser::{FromMeta, dsl_lexer, dsl_parser},
         properties::{Property, PropertyKind},
     },
@@ -32,22 +31,6 @@ impl Node {
             .into();
         Ok(Self(Rule::new(dsl, name.clone(), HashSet::new())))
     }
-
-    pub fn parser(&self, language: &Language) -> TokenStream {
-        let lang_ident = &language.ident;
-        let name_ident = &self.name();
-
-        // base body from Rule
-        let base_body = self.0.parser_body(language);
-
-        // tack on `.as_node(..)`
-        let wrapped_body = quote! {
-            #base_body.as_node(#lang_ident::#name_ident)
-        };
-
-        // delegate to Rule’s impl wrapper
-        self.0.parser(wrapped_body, language, true)
-    }
 }
 
 impl FromMeta for Node {
@@ -63,13 +46,12 @@ impl FromMeta for Node {
 
 impl LanguageElement for Node {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
-        let def_body = quote! {};
-        let def = struct_def(def_body, &self.name());
+        let name = &self.name();
+        let lang_ident = &language.ident;
 
-        let code = self.parser(language);
+        let code = self.0.parser_body(language);
         Ok(quote! {
-            #def
-            #code
+            node!(#lang_ident::#name,{#code});
         })
     }
 

@@ -5,7 +5,6 @@ use syn::{Ident, Lit, LitStr, MetaList};
 use crate::{
     derive::{
         attributes::allowed::ALLOWED_STATIC_TOKEN,
-        language::{parseable_impl, struct_def},
         parser::FromMeta,
         properties::{Operator, Property, PropertyKind},
     },
@@ -56,12 +55,11 @@ impl FromMeta for StaticToken {
 
 impl LanguageElement for StaticToken {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
-        let def_body = quote! {};
-        let def = struct_def(def_body, &self.name);
-        let impl_code = static_token_impl(&self.text, &self.name, &language.ident);
+        let text = &self.text;
+        let ident = &self.name;
+        let lang_ident = &language.ident;
         Ok(quote! {
-            #def
-            #impl_code
+            static_token!(#lang_ident::#ident, #text);
         })
     }
 
@@ -89,12 +87,4 @@ impl LanguageElement for StaticToken {
 
         Ok(())
     }
-}
-
-pub fn static_token_impl(text: &str, ident: &Ident, lang_ident: &Ident) -> TokenStream {
-    let parser = quote! {
-        use ::tree_gen::chumksy_ext::BuilderParser;
-        ::tree_gen::chumsky::prelude::just(#text).as_static_token(#lang_ident::#ident)
-    };
-    parseable_impl(parser, ident, lang_ident)
 }

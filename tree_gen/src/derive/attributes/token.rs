@@ -6,7 +6,6 @@ use syn::{Ident, Lit};
 use crate::{
     derive::{
         attributes::allowed::ALLOWED_TOKEN,
-        language::{parseable_impl, struct_def},
         parser::{FromMeta, Mir},
         properties::PropertyKind,
     },
@@ -128,14 +127,14 @@ impl FromMeta for Token {
 
 impl LanguageElement for Token {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
-        let def_body = quote! {};
-        let def = struct_def(def_body, &self.name);
         let parser = Self::parser(&self.expr);
-        let impl_code = token_impl(&self.name, &language.ident, parser);
+
+        let ident = &self.name;
+        let lang_ident = &language.ident;
+        // let impl_code = token_impl(&self.name, &language.ident, parser);
 
         Ok(quote! {
-            #def
-            #impl_code
+            token!(#lang_ident::#ident,{#parser});
         })
     }
 
@@ -146,13 +145,4 @@ impl LanguageElement for Token {
     fn name(&self) -> &Ident {
         &self.name
     }
-}
-
-pub fn token_impl(ident: &Ident, lang_ident: &Ident, body: TokenStream) -> TokenStream {
-    let parser = quote! {
-        use ::tree_gen::chumsky::prelude::*;
-        use tree_gen::chumksy_ext::*;
-        #body.as_token(#lang_ident::#ident)
-    };
-    parseable_impl(parser, ident, lang_ident)
 }

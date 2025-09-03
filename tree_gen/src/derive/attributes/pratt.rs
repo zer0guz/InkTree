@@ -5,7 +5,6 @@ use syn::{Ident, MetaList};
 use crate::{
     derive::{
         attributes::{Node, allowed::ALLOWED_PRATT},
-        language::struct_def,
         parser::FromMeta,
         properties::{Operator, Property, PropertyKind},
     },
@@ -67,13 +66,9 @@ impl FromMeta for Pratt {
 
 impl LanguageElement for Pratt {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
-        let def_body = quote! {};
-        let struct_def = struct_def(def_body, &self.name());
-
-        let impls = self.code(language);
+        let code = self.code(language);
         Ok(quote! {
-            #struct_def
-            #impls
+            #code
         })
     }
 

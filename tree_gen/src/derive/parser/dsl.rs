@@ -132,16 +132,9 @@ impl DslExpr {
             let cur_comp = ctx.recursion_info.node_to_comp.get(&cur).copied();
 
             if Some(comp) == cur_comp {
-                // ---- same SCC ----
                 let anchor_ident = ctx.anchor_ident;
-                if name == cur {
-                    // self → just use the anchor
-                    return quote! { #anchor_ident };
-                } else {
-                    // peer → call its anchored_parser with anchor + args
-                    let peer_ident = ctx.idents.get(name).unwrap();
-                    return quote! { #peer_ident::anchored_parser(#anchor_ident, #(#arg_tokens),*) };
-                }
+                // self → just use the anchor
+                return quote! { #anchor_ident };
             }
         }
 
