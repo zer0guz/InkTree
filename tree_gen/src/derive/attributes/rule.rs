@@ -57,7 +57,7 @@ impl Rule {
 
         self.dsl.parser(&ctx)
     }
-    pub fn parser(&self, body: TokenStream, language: &Language) -> TokenStream {
+    pub fn parser(&self, body: TokenStream, language: &Language, is_node: bool) -> TokenStream {
         let lang_ident = &language.ident;
         let name_ident = &self.name;
         let recursion_info = language.recursion_info.as_ref().expect("no recursion info");
@@ -71,22 +71,15 @@ impl Rule {
             // build peer + anchor info from SCC
             let comp_idx = recursion_info.node_to_comp[&self.name];
             let peers = &recursion_info.components[comp_idx];
-
-            let peer_anchors: Vec<TokenStream> = peers
+            let decls = peers
                 .iter()
                 .map(|peer| {
-                    // find edges of this peer inside SCC
-                    let used_edges = recursion_info
-                        .adj
-                        .get(peer)
-                        .into_iter()
-                        .flatten()
-                        .filter(|edge| peers.contains(edge));
-
-                    // wrap as Peer( …anchors… )
-                    quote!( #peer( #(#used_edges),* ) )
+                    Ident::new(
+                        &format!("{}_decl", peer.to_string().to_lowercase()),
+                        Span::call_site(),
+                    )
                 })
-                .collect();
+                .collect_vec();
 
             let used_anchors = recursion_info
                 .adj
@@ -97,15 +90,86 @@ impl Rule {
                 .map(|peer| Ident::new(&peer.to_string().to_lowercase(), Span::call_site()))
                 .collect_vec();
 
-            quote! {
-                impl #name_ident {
-                    tree_gen::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
-                    tree_gen::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
+            let defines = peers
+                .iter()
+                .map(|peer| {
+                    // find edges of this peer inside SCC
+                    let used_edges = recursion_info
+                        .adj
+                        .get(peer)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|edge| {
+                            if peers.contains(edge) {
+                                Some(Ident::new(
+                                    &format!("{}_decl", edge.to_string().to_lowercase()),
+                                    Span::call_site(),
+                                ))
+                            } else {
+                                None
+                            }
+                        });
+
+                    let peer_decl = Ident::new(
+                        &format!("{}_decl", peer.to_string().to_lowercase()),
+                        Span::call_site(),
+                    );
+                    // wrap as Peer( …anchors… )
+                    quote!( #peer_decl.define(#peer::anchored_parser(#(#used_edges.clone()),* )) )
+                })
+                .collect_vec();
+
+            let return_value = Ident::new(
+                &format!("{}_decl", self.name.to_string().to_lowercase()),
+                Span::call_site(),
+            );
+
+            let wrapper = quote! {
+                use ::tree_gen::chumsky::recursive::*;
+
+                // one declare for each SCC member
+                #( let mut #decls = Recursive::declare();)*
+                // define each SCC member with its specific anchors
+                #( #defines;)*
+
+                // return this one’s handle
+                #return_value
+
+            };
+
+            if is_node {
+                quote! {
+                    struct #name_ident;
+                    impl #name_ident {
+                        tree_gen::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
+                        tree_gen::make_parser!(#lang_ident,[#(#param_idents),*], { #wrapper });
+                        //tree_gen::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
+                    }
+                }
+            } else {
+                quote! {
+                    struct #name_ident;
+                    impl #name_ident {
+                        tree_gen::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
+                        tree_gen::make_parser!(#lang_ident,[#(#param_idents),*], { #wrapper });
+                        //tree_gen::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
+                    }
                 }
             }
         } else {
-            quote! {
-                rule!(#lang_ident::#name_ident,[#(#param_idents),*],{#body});
+            if is_node {
+                quote! {
+                    struct #name_ident;
+                    tree_gen::parseable!(#lang_ident::#name_ident, [$($param:ident),*],#body);
+                }
+            } else {
+                quote! {
+                    struct #name_ident;
+                    impl #name_ident {
+                        tree_gen::make_parser!(#lang_ident,[#(#param_idents),*],{#body});
+
+                    }
+                }
             }
         }
     }
@@ -159,7 +223,7 @@ impl Parse for Rule {
 
 impl LanguageElement for Rule {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
-        let parser = self.parser(self.parser_body(&language), &language);
+        let parser = self.parser(self.parser_body(&language), &language, false);
 
         Ok(quote! {
             #parser

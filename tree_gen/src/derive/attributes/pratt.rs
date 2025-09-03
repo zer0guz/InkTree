@@ -34,13 +34,13 @@ impl Pratt {
         let final_body = quote! {
             use ::tree_gen::chumsky::prelude::*;
             use ::tree_gen::engine::Builder;
-            use ::tree_gen::chumksy_ext::*;
+            use ::tree_gen::chumsky_ext::*;
             use ::tree_gen::chumsky::pratt::*;
             #wrapped_body.boxed().wrap_cp(#lang_ident::#name_ident)
         };
 
         // delegate to Rule’s impl wrapper
-        self.node.0.parser(final_body, language)
+        self.node.0.parser(final_body, language, true)
     }
 
     fn pratt_table(&self, lang_ident: &Ident, operators: &Vec<Operator>) -> TokenStream {

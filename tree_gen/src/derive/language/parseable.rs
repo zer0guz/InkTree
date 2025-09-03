@@ -1,4 +1,4 @@
-use crate::{chumksy_ext::BuilderParser, derive::language::Syntax};
+use crate::{chumsky_ext::BuilderParser, derive::language::Syntax};
 
 pub trait Parseable: Sized
 where

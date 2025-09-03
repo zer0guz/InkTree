@@ -59,7 +59,7 @@ impl LanguageElement for StaticToken {
         let ident = &self.name;
         let lang_ident = &language.ident;
         Ok(quote! {
-            static_token!(#lang_ident::#ident, #text);
+            tree_gen::static_token!(#lang_ident::#ident, #text);
         })
     }
 

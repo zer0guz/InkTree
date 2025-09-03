@@ -9,7 +9,7 @@ use chumsky::{
 };
 
 use crate::{
-    chumksy_ext::extra::{GreenExtra, GreenState, Input},
+    chumsky_ext::extra::{GreenExtra, GreenState, Input},
     engine::Builder,
     language::Syntax,
 };

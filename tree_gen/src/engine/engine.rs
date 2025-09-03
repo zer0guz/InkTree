@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use cstree::{build::NodeCache, green::GreenNode};
 
 use crate::{
-    chumksy_ext::Input,
+    chumsky_ext::Input,
     language::{Parseable, Syntax},
 };
 

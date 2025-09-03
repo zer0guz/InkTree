@@ -5,7 +5,7 @@ use cstree::{
 };
 
 use crate::{
-    chumksy_ext::{GreenState, Input},
+    chumsky_ext::{GreenState, Input},
     language::Syntax,
 };
 

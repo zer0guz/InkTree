@@ -1,4 +1,4 @@
-use crate::chumksy_ext::{BuilderParser, Input};
+use crate::chumsky_ext::{BuilderParser, Input};
 
 pub trait Syntax: cstree::Syntax + 'static {
     fn static_text(self) -> Option<&'static str>;

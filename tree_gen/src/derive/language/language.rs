@@ -129,9 +129,9 @@ impl Language {
 
                 fn parser<'src, 'cache, 'interner, Err>(
                     self,
-                ) -> impl ::tree_gen::chumksy_ext::BuilderParser<'src, 'cache, 'interner, (), Err, Self> + Clone
+                ) -> impl ::tree_gen::chumsky_ext::BuilderParser<'src, 'cache, 'interner, (), Err, Self> + Clone
                 where
-                    Err: chumsky::error::Error<'src, ::tree_gen::chumksy_ext::Input<'src>> + 'src,
+                    Err: chumsky::error::Error<'src, ::tree_gen::chumsky_ext::Input<'src>> + 'src,
 
                     'interner: 'cache,
                     'cache: 'src
@@ -237,7 +237,9 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
     }
     .map_err(Error::from)?;
 
-    let mut stream = TokenStream::new();
+    let mut stream = quote! {
+        use tree_gen::Parseable;
+    };
 
     stream.extend(language.syntax_impl());
 

@@ -39,7 +39,7 @@ impl Token {
                     Ok(s) => Literal::string(s),           // "foo\n" style
                     Err(_) => Literal::byte_string(bytes), // b"\xC8\xC8" style
                 };
-                quote! { just(#lit) }
+                quote! {just(#lit)}
             }
             Mir::CharClass(class) => match class {
                 Class::Unicode(unicode) => {
@@ -54,7 +54,7 @@ impl Token {
                         .collect();
 
                     quote! {
-                      ranges(&[ #(#ranges),* ])
+                      ranges(&[#(#ranges),*])
                     }
                 }
                 Class::Bytes(bytes) => {
@@ -69,7 +69,7 @@ impl Token {
                         .collect();
 
                     quote! {
-                      ranges(&[ #(#ranges),* ])
+                      ranges(&[#(#ranges),*])
                     }
                 }
             },
@@ -80,14 +80,14 @@ impl Token {
                         if acc.is_empty() {
                             p
                         } else {
-                            quote! { #acc.then(#p) }
+                            quote! {#acc.then(#p)}
                         }
                     })
             }
             Mir::Choice(mirs) => {
                 let branches: Vec<_> = mirs.iter().map(Self::parser).collect();
                 quote! {
-                    choice(( #(#branches),* ))
+                    choice((#(#branches),*))
                 }
             }
             Mir::ZeroOrMore(mir) => {
@@ -134,7 +134,7 @@ impl LanguageElement for Token {
         // let impl_code = token_impl(&self.name, &language.ident, parser);
 
         Ok(quote! {
-            token!(#lang_ident::#ident,{#parser});
+           tree_gen::token!(#lang_ident::#ident,{#parser});
         })
     }
 

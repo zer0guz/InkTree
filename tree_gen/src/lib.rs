@@ -1,4 +1,4 @@
-pub mod chumksy_ext;
+pub mod chumsky_ext;
 pub mod derive;
 pub mod engine;
 mod error;
