@@ -238,7 +238,7 @@ impl LanguageElement for Rule {
     }
 
     fn build(
-        &self,
+        &mut self,
         _properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {

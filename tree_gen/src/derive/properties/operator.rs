@@ -10,7 +10,7 @@ use syn::{Expr, Ident, Lit, LitInt, MetaList, punctuated::Punctuated, token::Com
 
 use crate::{derive::parser::FromMeta, language::ElementError};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[enum_dispatch(PrattOperator)]
 
 pub enum OperatorKind {
@@ -63,6 +63,7 @@ impl PrattOperator for Prefix {
             let builder: &mut Builder<'_, '_, #lang_ident> = extra.state();
             builder.start_node_at(lhs, #lang_ident::#ident);
             builder.finish_node();
+            println!("fold closure called");
             lhs
         }};
         let prec = self.0;
@@ -76,6 +77,8 @@ impl PrattOperator for Infix {
             let builder: &mut Builder<'_, '_, #lang_ident> = extra.state();
             builder.start_node_at(lhs, #lang_ident::#ident);
             builder.finish_node();
+            println!("fold closure called");
+
             lhs
         }};
         let assoc = match self.0 {
@@ -96,6 +99,8 @@ impl PrattOperator for Postfix {
             let builder: &mut Builder<'_, '_, #lang_ident> = extra.state();
             builder.start_node_at(lhs, #lang_ident::#ident);
             builder.finish_node();
+                        println!("fold closure called");
+
             lhs
         }};
         let prec = self.0;

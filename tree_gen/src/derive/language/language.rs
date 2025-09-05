@@ -56,10 +56,11 @@ pub(crate) struct Language {
     pub cycle_graph: RuleGraph,
     pub recursion_info: Option<RecursionInfo>,
     pub rules: Vec<Handle<Element>>,
+    pub extras: Vec<Ident>,
 }
 
 impl Language {
-    fn handle_element(&mut self, element: Element) -> Result<(), Errors<Error>> {
+    fn handle_element(&mut self, mut element: Element) -> Result<(), Errors<Error>> {
         element.build(self).map_err(Errors::map_errors)?;
         self.elements.push(element);
 
@@ -145,6 +146,15 @@ impl Language {
             }
         }
     }
+
+    fn token_sink(&self) -> TokenStream {
+        let lang_ident = &self.ident;
+        let extras = &self.extras;
+
+        quote! {
+            make_sink!(#lang_ident, [ #( #extras ),* ]);
+        }
+    }
 }
 
 pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
@@ -157,6 +167,7 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
         cycle_graph: RuleGraph::new(),
         recursion_info: None,
         rules: vec![],
+        extras: vec![],
     };
 
     let mut repr = vec![];
@@ -240,6 +251,13 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
     let mut stream = quote! {
         use tree_gen::Parseable;
     };
+
+    if !language.extras.is_empty() {
+        let sink = language.token_sink();
+        stream.extend(quote! {
+            #sink
+        });
+    }
 
     stream.extend(language.syntax_impl());
 

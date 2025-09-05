@@ -23,7 +23,7 @@ where
 {
     pub fn with_cache(cache: &'cache mut NodeCache<'interner>) -> Self {
         Builder::<'cache, 'interner> {
-            builder: GreenNodeBuilder::<'cache, 'interner>::with_cache(cache),
+            builder: GreenNodeBuilder::<'cache, 'interner, Sy>::with_cache(cache),
         }
     }
 
@@ -38,7 +38,7 @@ where
 {
     fn default() -> Self {
         Self {
-            builder: GreenNodeBuilder::default(),
+            builder: GreenNodeBuilder::<Sy>::default(),
         }
     }
 }

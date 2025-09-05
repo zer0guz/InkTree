@@ -2,7 +2,7 @@ use syn::Ident;
 
 use crate::{derive::parser::FromMeta, language::ElementError};
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Root;
 
 impl FromMeta for Root {

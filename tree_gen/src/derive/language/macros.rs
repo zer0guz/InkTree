@@ -66,25 +66,77 @@ macro_rules! parseable {
 
 #[macro_export]
 macro_rules! token {
-    ($lang_name:ident::$name:ident, $body:block) => {
+    // without sink
+    ($lang_name:ident :: $name:ident, $body:block) => {
         struct $name;
-        tree_gen::parseable!($lang_name::$name, [], {
-            use tree_gen::chumsky::Parser;
-            use tree_gen::chumsky::prelude::*;
-            use tree_gen::chumsky_ext::*;
+        $crate::parseable!($lang_name::$name, [], {
+            use $crate::chumsky::Parser;
+            use $crate::chumsky::prelude::*;
+            use $crate::chumsky_ext::*;
             $body.as_token($lang_name::$name)
         });
     };
+
+    // with sink
+    ($lang_name:ident :: $name:ident, $body:block, has_extras) => {
+        struct $name;
+        $crate::parseable!($lang_name::$name, [], {
+            use $crate::chumsky::Parser;
+            use $crate::chumsky::prelude::*;
+            use $crate::chumsky_ext::*;
+            $lang_name::sink($body.as_token($lang_name::$name))
+        });
+    };
 }
+
 #[macro_export]
 macro_rules! static_token {
+    // no sink
     ($lang_name:ident :: $name:ident, $text:literal) => {
         struct $name;
-        tree_gen::parseable!($lang_name::$name, [], {
-            use tree_gen::chumsky::prelude::*;
-            use tree_gen::chumsky_ext::*;
-
+        $crate::parseable!($lang_name::$name, [], {
+            use $crate::chumsky::prelude::*;
+            use $crate::chumsky_ext::*;
             just($text).as_static_token($lang_name::$name)
         });
+    };
+
+    // with sink (extras)
+    ($lang_name:ident :: $name:ident, $text:literal, has_extras) => {
+        struct $name;
+        $crate::parseable!($lang_name::$name, [], {
+            use $crate::chumsky::prelude::*;
+            use $crate::chumsky_ext::*;
+            $lang_name::sink(just($text).as_static_token($lang_name::$name))
+        });
+    };
+}
+
+#[macro_export]
+macro_rules! make_sink {
+    ($lang:ident, [$($extra:ident),+ $(,)?]) => {
+        impl $lang {
+            fn sink<'src, 'cache, 'interner, Err>(
+                parser: $crate::impl_type!($lang)
+            ) -> $crate::impl_type!($lang)
+            where
+                Err: chumsky::error::Error<'src, &'src str> + 'src,
+                'cache: 'src,
+                'interner: 'cache,
+            {
+                use $crate::chumsky::prelude::*;
+                use $crate::chumsky_ext::*;
+
+                // one “extras” parser that matches ANY of the extras and produces ()
+                let extras = choice((
+                    $(
+                        $extra::parser(),
+                    )*
+                ));
+
+                // consume zero or more extras, then the real token
+                extras.repeated().to_slice().as_node(TestLang::Expr).ignore_then(parser)
+            }
+        }
     };
 }

@@ -6,12 +6,12 @@ use syn::{Ident, punctuated::Punctuated, token::Comma};
 use crate::{derive::parser::FromMeta, language::ElementError};
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct DelimitedBy {
+pub struct _DelimitedBy {
     pub open: Ident,
     pub close: Ident,
 }
 
-impl DelimitedBy {
+impl _DelimitedBy {
     pub fn _parser(&self, inner: &TokenStream) -> TokenStream {
         let Self { open, close } = self;
 
@@ -19,7 +19,7 @@ impl DelimitedBy {
     }
 }
 
-impl FromMeta for DelimitedBy {
+impl FromMeta for _DelimitedBy {
     fn from_list(list: &syn::MetaList, _name: Option<&Ident>) -> Result<Self, ElementError> {
         let (open, close) = list
             .parse_args_with(Punctuated::<Ident, Comma>::parse_terminated)?

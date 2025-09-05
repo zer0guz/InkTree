@@ -36,7 +36,7 @@ impl Pratt {
             use ::tree_gen::engine::Builder;
             use ::tree_gen::chumsky_ext::*;
             use ::tree_gen::chumsky::pratt::*;
-            #wrapped_body.boxed().wrap_cp(#lang_ident::#name_ident)
+            #wrapped_body.boxed().wrap_cp(#lang_ident::#name_ident).always()
         };
 
         // delegate to Rule’s impl wrapper
@@ -81,7 +81,7 @@ impl LanguageElement for Pratt {
     }
 
     fn build(
-        &self,
+        &mut self,
         properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {

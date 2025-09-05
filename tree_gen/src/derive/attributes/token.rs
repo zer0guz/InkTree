@@ -7,7 +7,7 @@ use crate::{
     derive::{
         attributes::allowed::ALLOWED_TOKEN,
         parser::{FromMeta, Mir},
-        properties::PropertyKind,
+        properties::{Property, PropertyKind, try_handle_extra},
     },
     language::{ElementError, Language, LanguageElement},
 };
@@ -16,6 +16,7 @@ use crate::{
 pub struct Token {
     pub expr: Mir,
     name: Ident,
+    is_extra: bool,
 }
 
 impl Token {
@@ -28,7 +29,11 @@ impl Token {
             syn::Error::new_spanned(lit, format!("todo message mir error: {}", err))
         })?;
 
-        Ok(Self { expr, name })
+        Ok(Self {
+            expr,
+            name,
+            is_extra: false,
+        })
     }
     fn parser(expr: &Mir) -> TokenStream {
         let parser = match expr {
@@ -132,10 +137,15 @@ impl LanguageElement for Token {
         let ident = &self.name;
         let lang_ident = &language.ident;
         // let impl_code = token_impl(&self.name, &language.ident, parser);
-
-        Ok(quote! {
-           tree_gen::token!(#lang_ident::#ident,{#parser});
-        })
+        if language.extras.is_empty() || self.is_extra {
+            Ok(quote! {
+               tree_gen::token!(#lang_ident::#ident,{#parser});
+            })
+        } else {
+            Ok(quote! {
+               tree_gen::token!(#lang_ident::#ident,{#parser},has_extras);
+            })
+        }
     }
 
     fn allowed(&self) -> &'static [PropertyKind] {
@@ -144,5 +154,16 @@ impl LanguageElement for Token {
 
     fn name(&self) -> &Ident {
         &self.name
+    }
+
+    fn build(
+        &mut self,
+        properties: &Vec<Property>,
+        language: &mut Language,
+    ) -> Result<(), ElementError> {
+        properties
+            .iter()
+            .for_each(|prop| self.is_extra = try_handle_extra(&self.name, prop, language));
+        Ok(())
     }
 }

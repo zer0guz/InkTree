@@ -64,7 +64,7 @@ impl LanguageElement for Node {
     }
 
     fn build(
-        &self,
+        &mut self,
         properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {

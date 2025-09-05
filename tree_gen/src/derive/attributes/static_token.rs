@@ -6,7 +6,7 @@ use crate::{
     derive::{
         attributes::allowed::ALLOWED_STATIC_TOKEN,
         parser::FromMeta,
-        properties::{Operator, Property, PropertyKind},
+        properties::{Operator, Property, PropertyKind, try_handle_extra},
     },
     language::{ElementError, Language, LanguageElement},
 };
@@ -14,6 +14,7 @@ use crate::{
 pub struct StaticToken {
     pub text: String,
     name: Ident,
+    is_extra: bool,
 }
 
 impl StaticToken {
@@ -23,7 +24,11 @@ impl StaticToken {
             Lit::ByteStr(_) => todo!("support byte str"),
             _ => todo!("lit type error"),
         };
-        Ok(Self { text, name })
+        Ok(Self {
+            text,
+            name,
+            is_extra: false,
+        })
     }
 }
 
@@ -33,6 +38,7 @@ impl FromMeta for StaticToken {
         Ok(Self {
             text: lit.value(),
             name: name.expect("todo name option").clone(),
+            is_extra: false,
         }
         .into())
     }
@@ -58,9 +64,16 @@ impl LanguageElement for StaticToken {
         let text = &self.text;
         let ident = &self.name;
         let lang_ident = &language.ident;
-        Ok(quote! {
-            tree_gen::static_token!(#lang_ident::#ident, #text);
-        })
+
+        if language.extras.is_empty() || self.is_extra {
+            Ok(quote! {
+               tree_gen::static_token!(#lang_ident::#ident,#text);
+            })
+        } else {
+            Ok(quote! {
+               tree_gen::static_token!(#lang_ident::#ident,#text,has_extras);
+            })
+        }
     }
 
     fn allowed(&self) -> &'static [PropertyKind] {
@@ -72,17 +85,19 @@ impl LanguageElement for StaticToken {
     }
 
     fn build(
-        &self,
+        &mut self,
         properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {
         properties.iter().for_each(|prop| {
             if let Some(kind) = prop.try_as_operator() {
                 language.operators.push(Operator {
-                    kind,
+                    kind: kind,
                     ident: self.name.clone(),
                 });
-            };
+            } else {
+                self.is_extra = try_handle_extra(&self.name, prop, language);
+            }
         });
 
         Ok(())

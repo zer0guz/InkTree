@@ -46,6 +46,8 @@ where
     fn with_cp(
         self,
     ) -> impl BuilderParser<'src, 'cache, 'interner, cstree::build::Checkpoint, Err, Sy>;
+
+    fn always(self) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy> + Clone;
 }
 
 impl<'src, 'cache, 'interner, O, P, Err, Sy> BuilderParser<'src, 'cache, 'interner, O, Err, Sy>
@@ -63,22 +65,18 @@ where
         self,
         kind: Sy,
     ) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy> + Clone {
-        self.to_slice().map_with(move |slice, extra| {
-            Builder::<'cache, 'interner, Sy>::token(extra.state(), kind, slice);
-        })
+        as_token(self.to_slice(), kind)
     }
 
     fn as_static_token(
         self,
         kind: Sy,
     ) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy> + Clone {
-        self.ignored().map_with(move |_, extra| {
-            Builder::<'cache, 'interner, Sy>::static_token(extra.state(), kind);
-        })
+        self.ignored().then(as_static_token_ext(kind)).ignored()
     }
 
     fn as_node(self, kind: Sy) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy> + Clone {
-        with_cp::<Sy>()
+        with_cp_ext::<Sy>()
             .then(self)
             .map(|(checkpoint, _)| checkpoint)
             .wrap_cp(kind)
@@ -104,7 +102,13 @@ where
     fn with_cp(
         self,
     ) -> impl BuilderParser<'src, 'cache, 'interner, cstree::build::Checkpoint, Err, Sy> {
-        with_cp::<Sy>().then(self).map(|(checkpoint, _)| checkpoint)
+        with_cp_ext::<Sy>()
+            .then(self)
+            .map(|(checkpoint, _)| checkpoint)
+    }
+
+    fn always(self) -> impl BuilderParser<'src, 'cache, 'interner, (), Err, Sy> + Clone {
+        always(self)
     }
 }
 
@@ -126,7 +130,7 @@ pub struct WithCp_<Sy>(PhantomData<Sy>);
 
 type WithCp<Sy> = Ext<WithCp_<Sy>>;
 
-pub fn with_cp<Sy>() -> WithCp<Sy> {
+pub fn with_cp_ext<Sy>() -> WithCp<Sy> {
     Ext(WithCp_(PhantomData::<Sy>))
 }
 
@@ -150,5 +154,115 @@ where
     ) -> Result<<Builder<'cache, 'interner, Sy> as Inspector<'src, Input<'src>>>::Checkpoint, Err>
     {
         Ok(*input.save().inspector())
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct AsStaticToken_<Sy>(Sy);
+
+pub type AsStaticToken<Sy> = Ext<AsStaticToken_<Sy>>;
+
+pub fn as_static_token_ext<Sy>(kind: Sy) -> AsStaticToken<Sy> {
+    Ext(AsStaticToken_(kind))
+}
+
+impl<'src, 'cache, 'interner, Err, Sy>
+    ExtParser<'src, Input<'src>, (), GreenExtra<'cache, 'interner, Err, Sy>> for AsStaticToken_<Sy>
+where
+    Err: chumsky::error::Error<'src, &'src str> + 'src,
+    'cache: 'src,
+    'interner: 'src,
+    Sy: Syntax + 'src,
+{
+    fn parse(
+        &self,
+        input: &mut InputRef<'src, '_, Input<'src>, GreenExtra<'cache, 'interner, Err, Sy>>,
+    ) -> Result<(), Err> {
+        let extra = input.state();
+        Builder::<'cache, 'interner, Sy>::static_token(extra, self.0);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AsToken_<P, Sy> {
+    inner: P,
+    kind: Sy,
+}
+
+pub type AsToken<P, Sy> = Ext<AsToken_<P, Sy>>;
+
+// constructor: take an inner parser and a kind
+pub fn as_token<P, Sy>(inner: P, kind: Sy) -> AsToken<P, Sy> {
+    Ext(AsToken_ { inner, kind })
+}
+
+impl<'src, 'cache, 'interner, Err, Sy, P>
+    ExtParser<'src, Input<'src>, (), GreenExtra<'cache, 'interner, Err, Sy>> for AsToken_<P, Sy>
+where
+    // our inner parser must itself be a valid BuilderParser
+    P: BuilderParser<'src, 'cache, 'interner, &'src str, Err, Sy>,
+    P: Clone,
+    Err: chumsky::error::Error<'src, &'src str> + 'src,
+    'cache: 'src,
+    'interner: 'cache,
+    Sy: Syntax + 'src,
+{
+    fn parse(
+        &self,
+        input: &mut InputRef<'src, '_, Input<'src>, GreenExtra<'cache, 'interner, Err, Sy>>,
+    ) -> Result<(), Err> {
+        input.parse(&self.inner).and_then(|slice| {
+            let extra = input.state();
+            Builder::<'cache, 'interner, Sy>::token(extra, self.kind, slice);
+            Ok(())
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct Always_<P, O> {
+    inner: P,
+    _output: PhantomData<O>,
+}
+
+impl<P, O> Clone for Always_<P, O>
+where
+    P: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            _output: self._output.clone(),
+        }
+    }
+}
+
+pub type Always<P, Sy> = Ext<Always_<P, Sy>>;
+
+pub fn always<P, O>(inner: P) -> Always<P, O> {
+    Ext(Always_ {
+        inner,
+        _output: PhantomData::<O>,
+    })
+}
+
+impl<'src, 'cache, 'interner, Err, Sy, P, O>
+    ExtParser<'src, Input<'src>, (), GreenExtra<'cache, 'interner, Err, Sy>> for Always_<P, O>
+where
+    P: BuilderParser<'src, 'cache, 'interner, O, Err, Sy>,
+    Err: chumsky::error::Error<'src, &'src str> + 'src,
+    'cache: 'src,
+    'interner: 'cache,
+    Sy: Syntax + 'src,
+{
+    fn parse(
+        &self,
+        input: &mut InputRef<'src, '_, Input<'src>, GreenExtra<'cache, 'interner, Err, Sy>>,
+    ) -> Result<(), Err> {
+        match input.parse(&self.inner) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err),
+        }
     }
 }

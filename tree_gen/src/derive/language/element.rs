@@ -107,7 +107,7 @@ impl Element {
         })
     }
 
-    pub fn build(&self, language: &mut Language) -> Result<(), Errors<ElementError>> {
+    pub fn build(&mut self, language: &mut Language) -> Result<(), Errors<ElementError>> {
         let name = self.attribute.name().clone();
 
         if language
@@ -164,7 +164,7 @@ pub trait LanguageElement: Sized {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError>;
 
     fn build(
-        &self,
+        &mut self,
         _properties: &Vec<Property>,
         _language: &mut Language,
     ) -> Result<(), ElementError> {
