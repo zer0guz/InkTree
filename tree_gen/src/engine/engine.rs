@@ -1,48 +1,37 @@
-use std::marker::PhantomData;
+use std::fmt::Debug;
 
-use cstree::{build::NodeCache, green::GreenNode};
+use chumsky::Parser;
+use cstree::{
+    build::{GreenNodeBuilder, NodeCache},
+    green::GreenNode,
+    interning::MultiThreadedTokenInterner,
+};
 
 use crate::{
-    chumsky_ext::Input,
+    engine::Builder,
     language::{Parseable, Syntax},
 };
 
-pub struct _SyntaxEngine<'interner, Sy> {
-    cache: NodeCache<'interner>,
-    _phantom: PhantomData<Sy>,
-}
-
-impl<'interner, Sy> _SyntaxEngine<'interner, Sy>
+pub fn parse_with_cache<'src, 'interner, 'borrow, 'parse, Tok, Err, Sy>(
+    cache: NodeCache<'interner, &'borrow MultiThreadedTokenInterner>,
+    input: &'src str,
+) -> Result<GreenNode, Err>
 where
+    Err: chumsky::error::Error<'src, &'src str> + 'src + Debug + 'src,
+    Tok: Parseable<Syntax = Sy>,
     Sy: Syntax,
+    'borrow: 'src,
+    'interner: 'src,
 {
-    pub fn _new() -> Self {
-        Self {
-            cache: NodeCache::new(),
-            _phantom: PhantomData,
-        }
-    }
-    pub fn _from_cache(cache: NodeCache<'interner>) -> Self {
-        Self {
-            cache: cache,
-            _phantom: PhantomData,
-        }
-    }
+    let mut builder: Builder<'_, 'interner, 'borrow, Sy> = Builder {
+        builder: GreenNodeBuilder::<Sy, &MultiThreadedTokenInterner>::from_cache(cache),
+    };
 
-    fn _parse<'src, Err, Tok>(&mut self, _input: Input<'src>) -> Result<GreenNode, Err>
-    where
-        Err: chumsky::error::Error<'src, &'src str> + 'src,
-        Tok: Parseable<Syntax = Sy>,
-        'interner: 'src,
-    {
-        //let mut builder = Builder::with_cache(&mut self.cache);
+    let parser = Tok::parser::<Err>();
+    let result = parser.parse_with_state(input, &mut builder);
 
-        // Tok::parser::<Err>()
-        //     .parse_with_state(input, &mut builder);
+    result.unwrap();
 
-        // let (green, _) = builder.finish();
-        // Ok(green)
-
-        todo!("engine parse")
-    }
+    let (green, _) = builder.finish();
+    Ok(green)
 }

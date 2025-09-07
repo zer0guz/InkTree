@@ -2,7 +2,7 @@ pub mod chumsky_ext;
 pub mod derive;
 pub mod engine;
 mod error;
-mod incremental;
+pub mod incremental;
 mod util;
 
 #[cfg(feature = "derive")]

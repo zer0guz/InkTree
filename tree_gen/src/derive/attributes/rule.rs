@@ -139,16 +139,16 @@ impl Rule {
 
             if is_node {
                 quote! {
-                    struct #name_ident;
+                    pub struct #name_ident;
                     impl #name_ident {
                         tree_gen::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
-                        tree_gen::make_parser!(#lang_ident,[#(#param_idents),*], { #wrapper });
                         //tree_gen::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
                     }
+                    tree_gen::parseable!(#lang_ident::#name_ident,  [#(#param_idents),*],{#wrapper});
                 }
             } else {
                 quote! {
-                    struct #name_ident;
+                    pub struct #name_ident;
                     impl #name_ident {
                         tree_gen::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
                         tree_gen::make_parser!(#lang_ident,[#(#param_idents),*], { #wrapper });
@@ -159,12 +159,12 @@ impl Rule {
         } else {
             if is_node {
                 quote! {
-                    struct #name_ident;
+                    pub struct #name_ident;
                     tree_gen::parseable!(#lang_ident::#name_ident, [$($param:ident),*],#body);
                 }
             } else {
                 quote! {
-                    struct #name_ident;
+                    pub struct #name_ident;
                     impl #name_ident {
                         tree_gen::make_parser!(#lang_ident,[#(#param_idents),*],{#body});
 

@@ -1,7 +1,9 @@
+
 use chumsky::{input::Cursor, inspector::Inspector};
 use cstree::{
     build::{GreenNodeBuilder, NodeCache},
     green::GreenNode,
+    interning::MultiThreadedTokenInterner,
 };
 
 use crate::{
@@ -9,41 +11,42 @@ use crate::{
     language::Syntax,
 };
 
-pub struct Builder<'cache, 'interner, Sy>
+pub struct Builder<'cache, 'interner,'borrow , Sy>
 where
     Sy: Syntax,
-    'interner: 'cache,
+
 {
-    pub builder: GreenNodeBuilder<'cache, 'interner, Sy>,
+    pub builder: GreenNodeBuilder<'cache, 'interner, Sy, &'borrow MultiThreadedTokenInterner>,
+
 }
 
-impl<'cache, 'interner, Sy> Builder<'cache, 'interner, Sy>
+impl<'src,'cache, 'interner,'borrow , Sy> Builder<'cache, 'interner,'borrow , Sy>
 where
     Sy: Syntax,
 {
-    pub fn with_cache(cache: &'cache mut NodeCache<'interner>) -> Self {
-        Builder::<'cache, 'interner> {
-            builder: GreenNodeBuilder::<'cache, 'interner, Sy>::with_cache(cache),
+    pub fn with_cache(
+        cache: &'cache mut NodeCache<'interner, &'borrow MultiThreadedTokenInterner>,
+    ) -> Self {
+        Builder::<'cache, 'interner,'borrow > {
+            builder:
+                GreenNodeBuilder::with_cache(
+                    cache,
+                ),
         }
     }
 
-    pub fn finish(self) -> (GreenNode, Option<NodeCache<'interner>>) {
+    pub fn finish(
+        self,
+    ) -> (
+        GreenNode,
+        Option<NodeCache<'interner, &'borrow MultiThreadedTokenInterner>>,
+    ) {
         self.builder.finish()
     }
 }
 
-impl<'cache, 'interner, Sy> Default for Builder<'static, 'static, Sy>
-where
-    Sy: Syntax,
-{
-    fn default() -> Self {
-        Self {
-            builder: GreenNodeBuilder::<Sy>::default(),
-        }
-    }
-}
-
-impl<'src, 'cache, 'interner, Sy> Inspector<'src, Input<'src>> for Builder<'cache, 'interner, Sy>
+impl<'src, 'cache, 'interner,'borrow , Sy> Inspector<'src, Input<'src>>
+    for Builder<'cache, 'interner,'borrow , Sy>
 where
     Sy: Syntax,
 {
@@ -63,13 +66,12 @@ where
     }
 }
 
-impl<'src, 'cache, 'interner, Sy> GreenState<'src> for Builder<'cache, 'interner, Sy>
+impl<'src, 'cache, 'interner,'borrow , Sy> GreenState<'src,Sy> for Builder<'cache, 'interner,'borrow , Sy>
 where
     Sy: Syntax,
 {
-    type SyntaxKind = Sy;
 
-    fn start_node_at(&mut self, checkpoint: Self::Checkpoint, kind: Self::SyntaxKind) {
+    fn start_node_at(&mut self, checkpoint: Self::Checkpoint, kind: Sy) {
         self.builder.start_node_at(checkpoint, kind);
     }
 
@@ -85,11 +87,11 @@ where
         self.builder.checkpoint()
     }
 
-    fn token(&mut self, kind: Self::SyntaxKind, slice: &'src str) {
+    fn token(&mut self, kind: Sy, slice: &'src str) {
         self.builder.token(kind, slice);
     }
 
-    fn static_token(&mut self, kind: Self::SyntaxKind) {
+    fn static_token(&mut self, kind:Sy) {
         self.builder.static_token(kind);
     }
 }

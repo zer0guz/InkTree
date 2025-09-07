@@ -2,17 +2,19 @@
 macro_rules! make_parser {
     // with params: list of idents
     ($lang:ident, [$($arg:ident),*], $body:block) => {
-        fn parser<'src, 'cache, 'interner, Err>(
+        fn parser<'src, 'cache, 'interner,'borrow, Err>(
             $(
                 $arg: impl $crate::chumsky_ext::BuilderParser<
-                    'src, 'cache, 'interner, (), Err, $lang
-                > + Clone + 'src
+                    'src, 'cache, 'interner,'borrow, (), Err, $lang
+                > + Clone  + 'src
             ),*
         ) -> $crate::impl_type!($lang)
         where
             Err: chumsky::error::Error<'src, &'src str> + 'src,
-            'cache: 'src,
+            Builder<'cache, 'interner, 'borrow, $lang>: chumsky::inspector::Inspector<'src, & 'src str, Checkpoint = $crate::cstree::build::Checkpoint> + 'src,
+
             'interner: 'cache,
+            'borrow: 'interner,
         {
             use tree_gen::chumsky_ext::*;
             use tree_gen::chumsky::prelude::*;
@@ -25,7 +27,7 @@ macro_rules! make_parser {
 macro_rules! impl_type {
     ($lang:ident) => {
         impl ::tree_gen::chumsky_ext::BuilderParser<
-            'src, 'cache, 'interner, (), Err, $lang
+            'src, 'cache, 'interner,'borrow, (), Err, $lang
         > + Clone + 'src
     };
 }
@@ -33,7 +35,7 @@ macro_rules! impl_type {
 #[macro_export]
 macro_rules! make_anchored_parser {
     ($lang:ident, [$($anchor:ident),*], [$($param:ident),*], $body:block) => {
-        fn anchored_parser<'src, 'cache, 'interner, Err>(
+        fn anchored_parser<'src, 'cache, 'interner,'borrow, Err>(
             $(
                 $anchor: $crate::impl_type!($lang),
             )*
@@ -43,8 +45,12 @@ macro_rules! make_anchored_parser {
         ) -> $crate::impl_type!($lang)
         where
             Err: chumsky::error::Error<'src, &'src str> + 'src,
-            'cache: 'src,
+            Builder<'cache, 'interner, 'borrow, $lang>: $crate::chumsky::inspector::Inspector<'src, &'src str> + GreenState<'src, $lang> + 'src,
+            Builder<'cache, 'interner, 'borrow, $lang>: chumsky::inspector::Inspector<'src, & 'src str, Checkpoint = $crate::cstree::build::Checkpoint> + 'src,
+
             'interner: 'cache,
+            'borrow: 'interner,
+
         {
             use tree_gen::chumsky_ext::*;
             use tree_gen::chumsky::prelude::*;
@@ -68,7 +74,7 @@ macro_rules! parseable {
 macro_rules! token {
     // without sink
     ($lang_name:ident :: $name:ident, $body:block) => {
-        struct $name;
+        pub(crate) struct $name;
         $crate::parseable!($lang_name::$name, [], {
             use $crate::chumsky::Parser;
             use $crate::chumsky::prelude::*;
@@ -79,7 +85,7 @@ macro_rules! token {
 
     // with sink
     ($lang_name:ident :: $name:ident, $body:block, has_extras) => {
-        struct $name;
+        pub(crate) struct $name;
         $crate::parseable!($lang_name::$name, [], {
             use $crate::chumsky::Parser;
             use $crate::chumsky::prelude::*;
@@ -116,13 +122,14 @@ macro_rules! static_token {
 macro_rules! make_sink {
     ($lang:ident, [$($extra:ident),+ $(,)?]) => {
         impl $lang {
-            fn sink<'src, 'cache, 'interner, Err>(
+            fn sink<'src, 'cache, 'interner,'borrow, Err>(
                 parser: $crate::impl_type!($lang)
             ) -> $crate::impl_type!($lang)
             where
                 Err: chumsky::error::Error<'src, &'src str> + 'src,
-                'cache: 'src,
+                Builder<'cache, 'interner, 'borrow, $lang>: chumsky::inspector::Inspector<'src, & 'src str, Checkpoint = $crate::cstree::build::Checkpoint> + 'src,
                 'interner: 'cache,
+                'borrow: 'interner,
             {
                 use $crate::chumsky::prelude::*;
                 use $crate::chumsky_ext::*;

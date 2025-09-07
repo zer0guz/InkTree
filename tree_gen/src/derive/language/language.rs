@@ -94,6 +94,7 @@ impl Language {
             .collect();
         let ident = &self.ident;
         let variant_count = self.elements.len() as u32;
+        let root_ident = self.root_idents.iter().next().expect("already checked");
         quote! {
             impl ::tree_gen::cstree::Syntax for #ident {
                 fn from_raw(raw: tree_gen::cstree::RawSyntaxKind) -> Self {
@@ -110,6 +111,7 @@ impl Language {
             }
 
             impl ::tree_gen::Syntax for #ident {
+                type Root = #root_ident;
                 fn from_raw(raw: ::tree_gen::cstree::RawSyntaxKind) -> Self {
                     assert!(raw.0 < #variant_count, "Invalid raw syntax kind: {}", raw.0);
                     // Safety: discriminant is valid by the assert above
@@ -128,14 +130,16 @@ impl Language {
                     }
                 }
 
-                fn parser<'src, 'cache, 'interner, Err>(
+                fn parser<'src, 'cache, 'interner,'borrow, Err>(
                     self,
-                ) -> impl ::tree_gen::chumsky_ext::BuilderParser<'src, 'cache, 'interner, (), Err, Self> + Clone
+                ) -> impl ::tree_gen::chumsky_ext::BuilderParser<'src, 'cache, 'interner,'borrow, (), Err, Self> + Clone
                 where
-                    Err: chumsky::error::Error<'src, ::tree_gen::chumsky_ext::Input<'src>> + 'src,
+                    Err: chumsky::error::Error<'src, &'src str> + 'src,
+                    Builder<'cache, 'interner, 'borrow, #ident>: chumsky::inspector::Inspector<'src, & 'src str, Checkpoint = ::tree_gen::cstree::build::Checkpoint> + 'src,
 
                     'interner: 'cache,
-                    'cache: 'src
+                    'borrow: 'interner,
+
                 {
                     use ::tree_gen::chumsky::prelude::*;
                     use ::tree_gen::Parseable;

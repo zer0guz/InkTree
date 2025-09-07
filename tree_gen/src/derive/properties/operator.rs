@@ -60,7 +60,7 @@ pub struct Postfix(u16);
 impl PrattOperator for Prefix {
     fn pratt(&self, parser: TokenStream, ident: &Ident, lang_ident: &Ident) -> TokenStream {
         let fold = quote! {|lhs, _, extra| {
-            let builder: &mut Builder<'_, '_, #lang_ident> = extra.state();
+            let builder: &mut Builder<'_, '_,'_, #lang_ident> = extra.state();
             builder.start_node_at(lhs, #lang_ident::#ident);
             builder.finish_node();
             println!("fold closure called");
@@ -74,7 +74,7 @@ impl PrattOperator for Prefix {
 impl PrattOperator for Infix {
     fn pratt(&self, parser: TokenStream, ident: &Ident, lang_ident: &Ident) -> TokenStream {
         let fold = quote! {|lhs, _,_, extra| {
-            let builder: &mut Builder<'_, '_, #lang_ident> = extra.state();
+            let builder: &mut Builder<'_, '_,'_, #lang_ident> = extra.state();
             builder.start_node_at(lhs, #lang_ident::#ident);
             builder.finish_node();
             println!("fold closure called");
@@ -96,7 +96,7 @@ impl PrattOperator for Infix {
 impl PrattOperator for Postfix {
     fn pratt(&self, parser: TokenStream, ident: &Ident, lang_ident: &Ident) -> TokenStream {
         let fold = quote! {|lhs, _, extra| {
-            let builder: &mut Builder<'_, '_, #lang_ident> = extra.state();
+            let builder: &mut Builder<'_, '_, '_,#lang_ident> = extra.state();
             builder.start_node_at(lhs, #lang_ident::#ident);
             builder.finish_node();
                         println!("fold closure called");
