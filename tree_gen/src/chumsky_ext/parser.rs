@@ -10,23 +10,22 @@ use chumsky::{
 };
 
 use crate::{
-    chumsky_ext::{
-        Input,
-        extra::{GreenExtra, GreenState},
-    },
+    chumsky_ext::extra::{GreenExtra, GreenState},
     engine::Builder,
     language::Syntax,
 };
 
+type Input<'src> = &'src str;
+
 pub trait BuilderParser<'src, 'cache, 'interner, 'borrow, O, Err, Sy>:
-    Parser<'src, Input<'src>, O, Full<Err, Builder<'cache, 'interner, 'borrow, Sy>, ()>>
+    Parser<'src, Input<'src>, O, GreenExtra<'cache, 'interner, 'borrow, Err, Sy>>
 where
+    Err: chumsky::error::Error<'src, &'src str>,
     Builder<'cache, 'interner, 'borrow, Sy>:
-        Inspector<'src, &'src str> + GreenState<'src, Sy> + 'src,
-    Err: chumsky::error::Error<'src, &'src str> + 'src,
-    Sy: Syntax,
+        Inspector<'src, &'src str, Checkpoint = cstree::build::Checkpoint>,
     'interner: 'cache,
     'borrow: 'interner,
+    Sy: Syntax,
 {
     type State;
     fn as_token(
@@ -42,23 +41,16 @@ where
         kind: Sy,
     ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Sy> + Clone;
 
-    fn wrap_cp(
+    fn wrap_cp<'b>(
         self,
         kind: Sy,
     ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Sy> + Clone
     where
-        Self: Parser<
-                'src,
-                Input<'src>,
-                cstree::build::Checkpoint,
-                GreenExtra<'cache, 'interner, 'borrow, Err, Sy>,
-            > + Clone,
-        <Self as BuilderParser<'src, 'cache, 'interner, 'borrow, O, Err, Sy>>::State:
-            Inspector<'src, &'src str>;
+        Self: BuilderParser<'src, 'cache, 'interner, 'borrow, ::cstree::build::Checkpoint, Err, Sy>;
 
     fn with_cp(
         self,
-    ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, cstree::build::Checkpoint, Err, Sy>;
+    ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, cstree::build::Checkpoint, Err, Sy> + Clone;
 
     fn always(self) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Sy> + Clone;
 }
@@ -67,10 +59,7 @@ impl<'src, 'cache, 'interner, 'borrow, O, P, Err, Sy>
     BuilderParser<'src, 'cache, 'interner, 'borrow, O, Err, Sy> for P
 where
     P: chumsky::Parser<'src, &'src str, O, GreenExtra<'cache, 'interner, 'borrow, Err, Sy>> + Clone,
-    Builder<'cache, 'interner, 'borrow, Sy>: GreenState<'src, Sy> + 'src,
-    Builder<'cache, 'interner, 'borrow, Sy>:
-        Inspector<'src, Input<'src>, Checkpoint = cstree::build::Checkpoint> + 'src,
-    Err: chumsky::error::Error<'src, &'src str> + 'src,
+    Err: chumsky::error::Error<'src, &'src str>,
     Sy: Syntax,
     'interner: 'cache,
     'borrow: 'interner,
@@ -99,10 +88,9 @@ where
             .then(self)
             .map(|(checkpoint, _)| checkpoint)
             .wrap_cp(kind)
-        //self.with_cp().wrap_cp(kind)
     }
 
-    fn wrap_cp(
+    fn wrap_cp<'b>(
         self,
         kind: Sy,
     ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Sy> + Clone
@@ -110,16 +98,12 @@ where
         Self: BuilderParser<'src, 'cache, 'interner, 'borrow, cstree::build::Checkpoint, Err, Sy>
             + Clone,
     {
-        self.map_with(move |checkpoint, extra| {
-            let builder: &mut Builder<'_, '_, '_, Sy> = extra.state();
-            builder.start_node_at(checkpoint, kind);
-            builder.finish_node();
-        })
+        wrap_cp(self, kind)
     }
 
     fn with_cp(
         self,
-    ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, cstree::build::Checkpoint, Err, Sy>
+    ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, cstree::build::Checkpoint, Err, Sy> + Clone
     {
         with_cp_ext::<Sy>()
             .then(self)
@@ -135,12 +119,12 @@ pub fn ranges<'src, 'cache, 'interner, 'borrow, Err, Sy, R>(
     ranges: &[R],
 ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, char, Err, Sy> + Clone
 where
-    Err: chumsky::error::Error<'src, &'src str> + 'src,
+    Err: chumsky::error::Error<'src, &'src str>,
     Sy: Syntax,
     R: RangeBounds<char>,
     'interner: 'cache,
+    'borrow: 'cache,
     'borrow: 'interner,
-    'cache: 'src,
 {
     any().filter(move |c| ranges.iter().any(move |range| range.contains(c)))
 }
@@ -162,13 +146,8 @@ impl<'src, 'cache, 'interner, 'borrow, Err, Sy>
         Full<Err, Builder<'cache, 'interner, 'borrow, Sy>, ()>,
     > for WithCp_<Sy>
 where
-    Err: chumsky::error::Error<'src, &'src str> + 'src,
-    Builder<'cache, 'interner, 'borrow, Sy>: GreenState<'src, Sy> + 'src,
-    Builder<'cache, 'interner, 'borrow, Sy>:
-        Inspector<'src, Input<'src>, Checkpoint = cstree::build::Checkpoint> + 'src,
+    Err: chumsky::error::Error<'src, &'src str>,
     Sy: Syntax,
-    'interner: 'cache,
-    'borrow: 'cache,
 {
     fn parse<'parse>(
         &self,
@@ -196,9 +175,8 @@ impl<'src, 'cache, 'interner, 'borrow, Err, Sy>
     ExtParser<'src, Input<'src>, (), GreenExtra<'cache, 'interner, 'borrow, Err, Sy>>
     for AsStaticToken_<Sy>
 where
-    Err: chumsky::error::Error<'src, &'src str> + 'src,
-    'cache: 'src,
-    Sy: Syntax + 'src,
+    Err: chumsky::error::Error<'src, &'src str>,
+    Sy: Syntax,
 {
     fn parse(
         &self,
@@ -232,11 +210,8 @@ impl<'src, 'cache, 'interner, 'borrow, Err, Sy, P>
     ExtParser<'src, Input<'src>, (), GreenExtra<'cache, 'interner, 'borrow, Err, Sy>>
     for AsToken_<P, Sy>
 where
-    // our inner parser must itself be a valid BuilderParser
+    Err: chumsky::error::Error<'src, &'src str>,
     P: BuilderParser<'src, 'cache, 'interner, 'borrow, &'src str, Err, Sy>,
-    P: Clone,
-    Err: chumsky::error::Error<'src, &'src str> + 'src,
-    'cache: 'src,
     Sy: Syntax,
 {
     fn parse(
@@ -251,6 +226,45 @@ where
         input.parse(&self.inner).and_then(|slice| {
             let extra = input.state();
             Builder::<'cache, 'interner, 'borrow, Sy>::token(extra, self.kind, slice);
+            Ok(())
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct WrapCp_<P, Sy> {
+    inner: P,
+    kind: Sy,
+}
+
+pub type WrapCp<P, Sy> = Ext<WrapCp_<P, Sy>>;
+
+// constructor: take an inner parser and a kind
+pub fn wrap_cp<P, Sy>(inner: P, kind: Sy) -> WrapCp<P, Sy> {
+    Ext(WrapCp_ { inner, kind })
+}
+
+impl<'src, 'cache, 'interner, 'borrow, Err, Sy, P>
+    ExtParser<'src, Input<'src>, (), GreenExtra<'cache, 'interner, 'borrow, Err, Sy>>
+    for WrapCp_<P, Sy>
+where
+    Err: chumsky::error::Error<'src, &'src str>,
+    P: BuilderParser<'src, 'cache, 'interner, 'borrow, cstree::build::Checkpoint, Err, Sy>,
+    Sy: Syntax,
+{
+    fn parse(
+        &self,
+        input: &mut InputRef<
+            'src,
+            '_,
+            Input<'src>,
+            GreenExtra<'cache, 'interner, 'borrow, Err, Sy>,
+        >,
+    ) -> Result<(), Err> {
+        input.parse(&self.inner).and_then(|checkpoint| {
+            let extra = input.state();
+            Builder::start_node_at(extra, checkpoint, self.kind);
+            Builder::finish_node(extra);
             Ok(())
         })
     }
@@ -288,10 +302,8 @@ impl<'src, 'cache, 'interner, 'borrow, Err, Sy, P, O>
     for Always_<P, O>
 where
     P: BuilderParser<'src, 'cache, 'interner, 'borrow, O, Err, Sy>,
-    P: Clone,
-    Err: chumsky::error::Error<'src, &'src str> + 'src,
-    'cache: 'src,
-    Sy: Syntax + 'src,
+    Err: chumsky::error::Error<'src, &'src str>,
+    Sy: Syntax,
 {
     fn parse(
         &self,

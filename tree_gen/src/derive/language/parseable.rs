@@ -1,9 +1,4 @@
-
-use crate::{
-    chumsky_ext::BuilderParser,
-    derive::language::Syntax,
-    engine::Builder,
-};
+use crate::{chumsky_ext::BuilderParser, derive::language::Syntax};
 
 pub trait Parseable: Sized
 where
@@ -11,12 +6,12 @@ where
 {
     type Syntax;
 
-    fn parser<'src, 'cache, 'interner, 'borrow, Err>()
+    fn parser<'src, 'cache, 'interner, 'borrow, 'extra, Err>()
     -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Self::Syntax> + Clone
     where
-        Err: chumsky::error::Error<'src, &'src str> + 'src,
-        Builder<'cache, 'interner, 'borrow, Self::Syntax>: chumsky::inspector::Inspector<'src, &'src str, Checkpoint = cstree::build::Checkpoint>
-            + 'src,
+        Err: chumsky::error::Error<'src, &'src str> + 'extra,
         'interner: 'cache,
-        'borrow: 'interner;
+        'borrow: 'interner,
+        'src: 'extra,
+        'cache: 'extra;
 }

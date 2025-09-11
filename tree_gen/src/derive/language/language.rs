@@ -1,5 +1,5 @@
 use crate::{
-    derive::attributes::SyntaxAttributeKind,
+    derive::{attributes::SyntaxAttributeKind, properties::OperatorKind},
     language::rule_graph::{RecursionInfo, RuleGraph},
     util::{Handle, Pool},
 };
@@ -130,15 +130,15 @@ impl Language {
                     }
                 }
 
-                fn parser<'src, 'cache, 'interner,'borrow, Err>(
+                fn parser<'src, 'cache, 'interner,'borrow,'extra, Err>(
                     self,
-                ) -> impl ::tree_gen::chumsky_ext::BuilderParser<'src, 'cache, 'interner,'borrow, (), Err, Self> + Clone
+                ) -> impl ::tree_gen::chumsky_ext::BuilderParser<'src, 'cache, 'interner,'borrow, (), Err, Self> + Clone + 'extra
                 where
-                    Err: chumsky::error::Error<'src, &'src str> + 'src,
-                    Builder<'cache, 'interner, 'borrow, #ident>: chumsky::inspector::Inspector<'src, & 'src str, Checkpoint = ::tree_gen::cstree::build::Checkpoint> + 'src,
-
+                    Err: ::tree_gen::chumsky::error::Error<'src, &'src str> + 'extra,
                     'interner: 'cache,
                     'borrow: 'interner,
+                    'src: 'extra,
+                    'cache: 'extra,
 
                 {
                     use ::tree_gen::chumsky::prelude::*;
@@ -156,7 +156,78 @@ impl Language {
         let extras = &self.extras;
 
         quote! {
-            make_sink!(#lang_ident, [ #( #extras ),* ]);
+            ::tree_gen::make_sink!(#lang_ident, [ #( #extras ),* ]);
+        }
+    }
+
+    fn codegen(&self) -> Result<TokenStream, Errors<Error>> {
+        if self
+            .recursion_info
+            .as_ref()
+            .expect("bug")
+            .left_recursive
+            .len()
+            > 0
+        {
+            todo!("REEEE FIX YOUR LEFT RECURSION")
+        }
+
+        match self.root_idents.len() {
+            0 => Err(syn::Error::new_spanned(&self.ident, "no root todo text")),
+            1 => Ok(()),
+            _ => Err(syn::Error::new_spanned(
+                &self.root_idents[1],
+                "multiple roots todo text",
+            )),
+        }
+        .map_err(Error::from)?;
+
+        let mut stream = quote! {
+            use tree_gen::Parseable;
+        };
+
+        if !self.extras.is_empty() {
+            let sink = self.token_sink();
+            stream.extend(quote! {
+                #sink
+            });
+        }
+
+        stream.extend(self.syntax_impl());
+
+        let variants_code = self
+            .elements
+            .iter()
+            .map(|variant| Ok(variant.codegen(&self)?))
+            .collect_either()?;
+
+        stream.extend(variants_code);
+
+        stream.extend(self.pratt_codegen());
+        Ok(stream)
+    }
+
+    fn pratt_codegen(&self) -> TokenStream {
+        let mut prefix_ops = Vec::new();
+        let mut infix_ops = Vec::new();
+        let mut postfix_ops = Vec::new();
+
+        for op in &self.operators {
+            let tokens = op.pratt_op();
+            match op.kind {
+                OperatorKind::Prefix(_) => prefix_ops.push(tokens),
+                OperatorKind::Infix(_) => infix_ops.push(tokens),
+                OperatorKind::Postfix(_) => postfix_ops.push(tokens),
+            }
+        }
+
+        quote! {
+            ::tree_gen::define_pratt_ext!(
+                TestLang,
+                prefix: [ #( #prefix_ops, )* ],
+                infix: [ #( #infix_ops, )* ],
+                postfix: [ #( #postfix_ops, )* ]
+            );
         }
     }
 }
@@ -228,50 +299,5 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
 
     language.recursion_info = Some(language.cycle_graph.into_recursive_info(&rules));
 
-    if language
-        .recursion_info
-        .as_ref()
-        .expect("bug")
-        .left_recursive
-        .len()
-        > 0
-    {
-        todo!("REEEE FIX YOUR LEFT RECURSION")
-    }
-
-    match language.root_idents.len() {
-        0 => Err(syn::Error::new_spanned(
-            &language.ident,
-            "no root todo text",
-        )),
-        1 => Ok(()),
-        _ => Err(syn::Error::new_spanned(
-            &language.root_idents[1],
-            "multiple roots todo text",
-        )),
-    }
-    .map_err(Error::from)?;
-
-    let mut stream = quote! {
-        use tree_gen::Parseable;
-    };
-
-    if !language.extras.is_empty() {
-        let sink = language.token_sink();
-        stream.extend(quote! {
-            #sink
-        });
-    }
-
-    stream.extend(language.syntax_impl());
-
-    let variants_code = language
-        .elements
-        .iter()
-        .map(|variant| Ok(variant.codegen(&language)?))
-        .collect_either()?;
-
-    stream.extend(variants_code);
-
-    Ok(stream)
+    language.codegen()
 }

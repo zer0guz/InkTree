@@ -1,4 +1,3 @@
-
 use chumsky::{input::Cursor, inspector::Inspector};
 use cstree::{
     build::{GreenNodeBuilder, NodeCache},
@@ -6,32 +5,24 @@ use cstree::{
     interning::MultiThreadedTokenInterner,
 };
 
-use crate::{
-    chumsky_ext::{GreenState, Input},
-    language::Syntax,
-};
+use crate::{chumsky_ext::GreenState, language::Syntax};
 
-pub struct Builder<'cache, 'interner,'borrow , Sy>
+pub struct Builder<'cache, 'interner, 'borrow, Sy>
 where
     Sy: Syntax,
-
 {
     pub builder: GreenNodeBuilder<'cache, 'interner, Sy, &'borrow MultiThreadedTokenInterner>,
-
 }
 
-impl<'src,'cache, 'interner,'borrow , Sy> Builder<'cache, 'interner,'borrow , Sy>
+impl<'src, 'cache, 'interner, 'borrow, Sy> Builder<'cache, 'interner, 'borrow, Sy>
 where
     Sy: Syntax,
 {
     pub fn with_cache(
         cache: &'cache mut NodeCache<'interner, &'borrow MultiThreadedTokenInterner>,
     ) -> Self {
-        Builder::<'cache, 'interner,'borrow > {
-            builder:
-                GreenNodeBuilder::with_cache(
-                    cache,
-                ),
+        Builder::<'cache, 'interner, 'borrow> {
+            builder: GreenNodeBuilder::with_cache(cache),
         }
     }
 
@@ -45,8 +36,8 @@ where
     }
 }
 
-impl<'src, 'cache, 'interner,'borrow , Sy> Inspector<'src, Input<'src>>
-    for Builder<'cache, 'interner,'borrow , Sy>
+impl<'src, 'cache, 'interner, 'borrow, Sy> Inspector<'src, &'src str>
+    for Builder<'cache, 'interner, 'borrow, Sy>
 where
     Sy: Syntax,
 {
@@ -54,22 +45,23 @@ where
 
     fn on_token(&mut self, _: &char) {}
 
-    fn on_save<'parse>(&self, _: &Cursor<'src, 'parse, Input<'src>>) -> Self::Checkpoint {
+    fn on_save<'parse>(&self, _: &Cursor<'src, 'parse, &'src str>) -> Self::Checkpoint {
         self.builder.checkpoint()
     }
 
     fn on_rewind<'parse>(
         &mut self,
-        marker: &chumsky::input::Checkpoint<'src, 'parse, Input<'src>, Self::Checkpoint>,
+        _marker: &chumsky::input::Checkpoint<'src, 'parse, &'src str, Self::Checkpoint>,
     ) {
-        self.builder.revert_to(*marker.inspector());
+        //self.builder.revert_to(*marker.inspector());
     }
 }
 
-impl<'src, 'cache, 'interner,'borrow , Sy> GreenState<'src,Sy> for Builder<'cache, 'interner,'borrow , Sy>
+impl<'cache, 'interner, 'borrow, Sy> GreenState<Sy> for Builder<'cache, 'interner, 'borrow, Sy>
 where
     Sy: Syntax,
 {
+    type Checkpoint = cstree::build::Checkpoint;
 
     fn start_node_at(&mut self, checkpoint: Self::Checkpoint, kind: Sy) {
         self.builder.start_node_at(checkpoint, kind);
@@ -87,11 +79,11 @@ where
         self.builder.checkpoint()
     }
 
-    fn token(&mut self, kind: Sy, slice: &'src str) {
+    fn token(&mut self, kind: Sy, slice: &str) {
         self.builder.token(kind, slice);
     }
 
-    fn static_token(&mut self, kind:Sy) {
+    fn static_token(&mut self, kind: Sy) {
         self.builder.static_token(kind);
     }
 }

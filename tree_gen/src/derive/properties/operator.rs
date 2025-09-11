@@ -25,16 +25,16 @@ pub struct Operator {
 }
 
 impl Operator {
-    pub fn pratt_op(&self, atom_ident: &Ident, lang_ident: &Ident) -> TokenStream {
+    pub fn pratt_op(&self) -> TokenStream {
         let op_ident = &self.ident;
         let parser = quote! {#op_ident::parser().with_cp()};
-        self.kind.pratt(parser, atom_ident, lang_ident)
+        self.kind.pratt(parser)
     }
 }
 
 #[enum_dispatch]
 pub trait PrattOperator {
-    fn pratt(&self, parser: TokenStream, ident: &Ident, lang_ident: &Ident) -> TokenStream;
+    fn pratt(&self, parser: TokenStream) -> TokenStream;
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, From, Clone, Copy)]
@@ -50,6 +50,7 @@ impl std::hash::Hash for Infix {
             Associativity::Left(prec) | Associativity::Right(prec) => {
                 prec.hash(state);
             }
+            Associativity::None(_) => todo!("chumsky pratt assoc none update todo"),
         }
     }
 }
@@ -58,54 +59,35 @@ impl std::hash::Hash for Infix {
 pub struct Postfix(u16);
 
 impl PrattOperator for Prefix {
-    fn pratt(&self, parser: TokenStream, ident: &Ident, lang_ident: &Ident) -> TokenStream {
-        let fold = quote! {|lhs, _, extra| {
-            let builder: &mut Builder<'_, '_,'_, #lang_ident> = extra.state();
-            builder.start_node_at(lhs, #lang_ident::#ident);
-            builder.finish_node();
-            println!("fold closure called");
-            lhs
-        }};
+    fn pratt(&self, parser: TokenStream) -> TokenStream {
         let prec = self.0;
 
-        quote! {prefix(#prec,#parser,#fold)}
+        quote! {
+            (#prec, #parser)
+        }
     }
 }
 impl PrattOperator for Infix {
-    fn pratt(&self, parser: TokenStream, ident: &Ident, lang_ident: &Ident) -> TokenStream {
-        let fold = quote! {|lhs, _,_, extra| {
-            let builder: &mut Builder<'_, '_,'_, #lang_ident> = extra.state();
-            builder.start_node_at(lhs, #lang_ident::#ident);
-            builder.finish_node();
-            println!("fold closure called");
-
-            lhs
-        }};
-        let assoc = match self.0 {
+    fn pratt(&self, parser: TokenStream) -> TokenStream {
+        match self.0 {
             Associativity::Left(prec) => {
-                quote! {::tree_gen::chumsky::pratt::Associativity::Left(#prec)}
+                quote! {(#prec,Left,#parser)}
             }
             Associativity::Right(prec) => {
-                quote! {::tree_gen::chumsky::pratt::Associativity::Right(#prec)}
+                quote! {(#prec,Left,#parser)}
             }
-        };
-
-        quote! {infix(#assoc,#parser,#fold)}
+            Associativity::None(_) => {
+                todo!("handle chumskys new None assoc");
+                //quote! {#prec,None,#parser}
+            }
+        }
     }
 }
 impl PrattOperator for Postfix {
-    fn pratt(&self, parser: TokenStream, ident: &Ident, lang_ident: &Ident) -> TokenStream {
-        let fold = quote! {|lhs, _, extra| {
-            let builder: &mut Builder<'_, '_, '_,#lang_ident> = extra.state();
-            builder.start_node_at(lhs, #lang_ident::#ident);
-            builder.finish_node();
-                        println!("fold closure called");
-
-            lhs
-        }};
+    fn pratt(&self, parser: TokenStream) -> TokenStream {
         let prec = self.0;
 
-        quote! {postfix(#prec,#parser,#fold)}
+        quote! {(#prec,#parser)}
     }
 }
 

@@ -6,7 +6,7 @@ use crate::{
     derive::{
         attributes::{Node, allowed::ALLOWED_PRATT},
         parser::FromMeta,
-        properties::{Operator, Property, PropertyKind},
+        properties::{Property, PropertyKind},
     },
     language::{ElementError, Language, LanguageElement},
 };
@@ -24,35 +24,11 @@ impl Pratt {
         // base body from Rule
         let base_body = self.node.0.parser_body(language);
 
-        let operators = &language.operators;
-        let pratt_ops = Self::pratt_table(&self, lang_ident, operators);
-
-        let wrapped_body = quote! {
-            #base_body.with_cp().pratt(#pratt_ops)
+        let pratt = quote! {
+            pratt_ext(#base_body,#lang_ident::#name_ident)
         };
 
-        let final_body = quote! {
-            use ::tree_gen::chumsky::prelude::*;
-            use ::tree_gen::engine::Builder;
-            use ::tree_gen::chumsky_ext::*;
-            use ::tree_gen::chumsky::pratt::*;
-            #wrapped_body.boxed().wrap_cp(#lang_ident::#name_ident).always()
-        };
-
-        // delegate to Rule’s impl wrapper
-        self.node.0.parser(final_body, language, true)
-    }
-
-    fn pratt_table(&self, lang_ident: &Ident, operators: &Vec<Operator>) -> TokenStream {
-        let operators = operators
-            .iter()
-            .map(|operator| operator.pratt_op(self.name(), lang_ident));
-
-        quote! {
-            //fn pratt_table() -> &'static [PrattOp<Self>] {
-                (#( #operators ),* )
-            //}
-        }
+        self.node.0.parser(pratt, language, true)
     }
 }
 

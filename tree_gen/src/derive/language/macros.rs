@@ -2,19 +2,20 @@
 macro_rules! make_parser {
     // with params: list of idents
     ($lang:ident, [$($arg:ident),*], $body:block) => {
-        fn parser<'src, 'cache, 'interner,'borrow, Err>(
+        fn parser<'src, 'cache, 'interner,'borrow,'extra, Err>(
             $(
                 $arg: impl $crate::chumsky_ext::BuilderParser<
                     'src, 'cache, 'interner,'borrow, (), Err, $lang
-                > + Clone  + 'src
+                > + Clone + 'extra
             ),*
         ) -> $crate::impl_type!($lang)
         where
-            Err: chumsky::error::Error<'src, &'src str> + 'src,
-            Builder<'cache, 'interner, 'borrow, $lang>: chumsky::inspector::Inspector<'src, & 'src str, Checkpoint = $crate::cstree::build::Checkpoint> + 'src,
-
+            Err: $crate::chumsky::error::Error<'src, &'src str>  + 'extra,
             'interner: 'cache,
             'borrow: 'interner,
+            'src: 'extra,
+            'cache: 'extra
+
         {
             use tree_gen::chumsky_ext::*;
             use tree_gen::chumsky::prelude::*;
@@ -28,14 +29,14 @@ macro_rules! impl_type {
     ($lang:ident) => {
         impl ::tree_gen::chumsky_ext::BuilderParser<
             'src, 'cache, 'interner,'borrow, (), Err, $lang
-        > + Clone + 'src
+        > + Clone + 'extra
     };
 }
 
 #[macro_export]
 macro_rules! make_anchored_parser {
     ($lang:ident, [$($anchor:ident),*], [$($param:ident),*], $body:block) => {
-        fn anchored_parser<'src, 'cache, 'interner,'borrow, Err>(
+        fn anchored_parser<'src, 'cache, 'interner,'borrow,'extra, Err>(
             $(
                 $anchor: $crate::impl_type!($lang),
             )*
@@ -44,12 +45,11 @@ macro_rules! make_anchored_parser {
             )*
         ) -> $crate::impl_type!($lang)
         where
-            Err: chumsky::error::Error<'src, &'src str> + 'src,
-            Builder<'cache, 'interner, 'borrow, $lang>: $crate::chumsky::inspector::Inspector<'src, &'src str> + GreenState<'src, $lang> + 'src,
-            Builder<'cache, 'interner, 'borrow, $lang>: chumsky::inspector::Inspector<'src, & 'src str, Checkpoint = $crate::cstree::build::Checkpoint> + 'src,
-
+            Err:  $crate::chumsky::error::Error<'src, &'src str> + 'extra,
             'interner: 'cache,
             'borrow: 'interner,
+            'src: 'extra,
+            'cache: 'extra
 
         {
             use tree_gen::chumsky_ext::*;
@@ -122,28 +122,161 @@ macro_rules! static_token {
 macro_rules! make_sink {
     ($lang:ident, [$($extra:ident),+ $(,)?]) => {
         impl $lang {
-            fn sink<'src, 'cache, 'interner,'borrow, Err>(
+            fn sink<'src, 'cache, 'interner,'borrow,'extra, Err>(
                 parser: $crate::impl_type!($lang)
             ) -> $crate::impl_type!($lang)
             where
-                Err: chumsky::error::Error<'src, &'src str> + 'src,
-                Builder<'cache, 'interner, 'borrow, $lang>: chumsky::inspector::Inspector<'src, & 'src str, Checkpoint = $crate::cstree::build::Checkpoint> + 'src,
+                Err:  $crate::chumsky::error::Error<'src, &'src str> + 'extra,
                 'interner: 'cache,
                 'borrow: 'interner,
+                'cache: 'extra,
+                'src: 'extra,
+
             {
                 use $crate::chumsky::prelude::*;
                 use $crate::chumsky_ext::*;
 
-                // one “extras” parser that matches ANY of the extras and produces ()
                 let extras = choice((
                     $(
                         $extra::parser(),
                     )*
                 ));
 
-                // consume zero or more extras, then the real token
-                extras.repeated().to_slice().as_node(TestLang::Expr).ignore_then(parser)
+                extras.repeated().ignore_then(parser)
             }
         }
+    };
+}
+
+#[macro_export]
+macro_rules! define_pratt_ext {
+    (
+        $lang_name:ident,
+        prefix: [ $( ($p_prec:literal, $p_parser:expr) ),* $(,)? ],
+        infix:  [ $( ($i_prec:literal, $i_assoc:ident, $i_parser:expr) ),* $(,)? ],
+        postfix:[ $( ($x_prec:literal, $x_parser:expr) ),* $(,)? ]
+    ) => {
+        #[derive(Clone)]
+        pub struct PrattExt_<Atom> {
+            atom: Atom,
+            kind: $lang_name,
+        }
+
+        pub type PrattExt<Atom> = ::tree_gen::chumsky::extension::v1::Ext<PrattExt_<Atom>>;
+
+        pub fn pratt_ext<Atom>(atom: Atom, kind:  $lang_name) -> PrattExt<Atom> {
+            ::tree_gen::chumsky::extension::v1::Ext(PrattExt_ { atom, kind })
+        }
+
+        impl<'src, 'cache, 'interner, 'borrow,'extra, Err, Atom>
+            ::tree_gen::chumsky::extension::v1::ExtParser<
+                'src,
+                &'src str,
+                (),
+                ::tree_gen::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>,
+            > for PrattExt_<Atom>
+        where
+            Err: ::tree_gen::chumsky::error::Error<'src, &'src str> + 'extra,
+            Atom: ::tree_gen::chumsky_ext::BuilderParser<
+                'src, 'cache, 'interner, 'borrow, (), Err, $lang_name
+            > + Clone,
+        {
+            fn parse(
+                &self,
+                inp: &mut ::tree_gen::chumsky::input::InputRef<'src,'_,&'src str,::tree_gen::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>>,
+            ) -> Result<(), Err> {
+                use ::tree_gen::engine::Builder;
+                use ::tree_gen::chumsky_ext::*;
+
+                fn go<'src, 'cache, 'interner, 'borrow,'extra, Err, Atom>(
+                    inp: &mut ::tree_gen::chumsky::input::InputRef<
+                        'src,
+                        '_,
+                        &'src str,
+                        ::tree_gen::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>,
+                    >,
+                    atom: &Atom,
+                    kind: $lang_name,
+                    min_power: u16,
+                ) -> Result<::tree_gen::cstree::build::Checkpoint, Err>
+                where
+                    Err: ::tree_gen::chumsky::error::Error<'src, &'src str> + 'extra,
+                    Atom: ::tree_gen::chumsky_ext::BuilderParser<
+                        'src, 'cache, 'interner, 'borrow, (), Err, $lang_name
+                    > + Clone,
+                {
+                    use $crate::chumsky::pratt::*;
+                    let mut lhs_cp = inp.parse(&atom.clone().with_cp())?;
+
+                    loop {
+                        let checkpoint = inp.save();
+
+                        // prefix ops
+                        $(
+                            if let Ok(_) = inp.parse($p_parser) {
+                                let rhs_cp = go(inp, atom, kind, $p_prec)?;
+                                let builder: &mut Builder<'_, '_, '_, $lang_name> = inp.state();
+                                builder.start_node_at(rhs_cp, kind);
+                                builder.finish_node();
+                                lhs_cp = rhs_cp;
+                                continue;
+                            }
+                        )*
+
+                        // infix ops
+                        $(
+                            if let Ok(_) = inp.parse($i_parser) {
+                                if $i_prec < min_power {
+                                    inp.rewind(checkpoint);
+                                    break;
+                                }
+                                let next_min = $crate::pratt_next_min_power!($i_prec, $i_assoc);
+                                let rhs_cp = go(inp, atom, kind, next_min)?;
+                                let builder: &mut Builder<'_, '_, '_, $lang_name> = inp.state();
+                                builder.start_node_at(lhs_cp, kind);
+                                builder.finish_node();
+                                lhs_cp = rhs_cp;
+                                continue;
+                            }
+                        )*
+
+                        // postfix ops
+                        $(
+                            if let Ok(_) = inp.parse($x_parser) {
+                                if $x_prec < min_power {
+                                    inp.rewind(checkpoint);
+                                    break;
+                                }
+                                let builder: &mut Builder<'_, '_, '_, $lang_name> = inp.state();
+                                builder.start_node_at(lhs_cp, kind);
+                                builder.finish_node();
+                                continue;
+                            }
+                        )*
+
+                        inp.rewind(checkpoint);
+                        break;
+                    }
+
+                    Ok(lhs_cp)
+                }
+
+                let _root_cp = go(inp, &self.atom, self.kind, 0)?;
+                Ok(())
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! pratt_next_min_power {
+    ( $prec:expr, Left ) => {
+        $prec + 1
+    };
+    ( $prec:expr, Right ) => {
+        $prec
+    };
+    ( $prec:expr, None ) => {
+        compile_error!("Associativity::None not supported yet in pratt_next_min_power!");
     };
 }

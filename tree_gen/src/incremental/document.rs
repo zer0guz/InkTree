@@ -1,54 +1,51 @@
+use chumsky::inspector::Inspector;
+use cstree::{build::NodeCache, interning::MultiThreadedTokenInterner};
 use std::fmt::Debug;
-use cstree::{
-    build::NodeCache,
-    interning::MultiThreadedTokenInterner,
+
+use crate::{
+    engine::{Builder, parse_with_cache},
+    language::Syntax,
 };
 
-use crate::{chumsky_ext::Input, engine::parse_with_cache, language::Syntax};
-
-pub struct DocumentSession<'src, 'interner, 'borrow> {
-    input: &'src str,
-    cache: Option<NodeCache<'interner, &'borrow MultiThreadedTokenInterner>>,
+pub struct DocumentSession<'interner, 'borrow> {
+    cache: NodeCache<'interner, &'borrow MultiThreadedTokenInterner>,
 }
 
-impl<'src, 'borrow, 'interner> DocumentSession<'src, 'interner, 'borrow> {
-    pub fn new(input:&'src str,interner: &'borrow MultiThreadedTokenInterner) -> Self
+impl<'interner, 'borrow> DocumentSession<'interner, 'borrow> {
+    pub fn new(interner: &'borrow MultiThreadedTokenInterner) -> Self
 where {
         let cache = NodeCache::from_interner(&*interner);
 
-        Self {
-            cache: Some(cache),
-            input,
-        }
+        Self { cache: cache }
     }
 
-    pub fn parse<'parse, Err, Sy>(&'parse mut self)
-    where
+    pub fn parse<'src, Err, Sy>(
+        cache: &mut NodeCache<'interner, &'borrow MultiThreadedTokenInterner>,
+        input: &'src str,
+    ) where
         Sy: Syntax,
-        Err: chumsky::error::Error<'src, &'src str> + Debug + 'src,
-        'borrow: 'src,
+        Err: chumsky::error::Error<'src, &'src str> + Debug,
         'interner: 'src,
     {
-        let cache = self.cache.take().unwrap();
-        let _ = parse_with_cache::<Sy::Root, Err, Sy>(cache, self.input).unwrap();
+        let _ = parse_with_cache::<Sy::Root, Err, Sy>(cache, input).unwrap();
     }
 
-    pub fn open<Err, Sy>(
+    pub fn open<'src, Err, Sy>(
         initial: &'src str,
         interner: &'interner mut &'borrow MultiThreadedTokenInterner,
     ) -> Result<Self, Err>
     where
-        Err: chumsky::error::Error<'src, Input<'src>> + 'src + Debug,
+        Err: chumsky::error::Error<'src, &'src str> + Debug,
+        Builder<'src, 'interner, 'borrow, Sy>:
+            Inspector<'src, &'src str, Checkpoint = cstree::build::Checkpoint>,
         Sy: Syntax,
-        'borrow: 'src,
         'interner: 'src,
     {
-        let mut a = Self {
-            cache: Some(NodeCache::with_interner(interner)),
-            input: initial,
+        let mut a: DocumentSession<'interner, 'borrow> = Self {
+            cache: NodeCache::with_interner(interner),
         };
 
-        a.parse::<Err, Sy>();
+        Self::parse::<Err, Sy>(&mut a.cache, initial);
 
         Ok(a)
     }
