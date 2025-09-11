@@ -215,7 +215,7 @@ macro_rules! define_pratt_ext {
                         $(
                             if let Ok(_) = inp.parse($p_parser) {
                                 let rhs_cp = go(inp, atom, kind, $p_prec)?;
-                                let builder: &mut Builder<'_, '_, '_, $lang_name> = inp.state();
+                                let builder = inp.state();
                                 builder.start_node_at(rhs_cp, kind);
                                 builder.finish_node();
                                 lhs_cp = rhs_cp;
@@ -232,7 +232,7 @@ macro_rules! define_pratt_ext {
                                 }
                                 let next_min = $crate::pratt_next_min_power!($i_prec, $i_assoc);
                                 let rhs_cp = go(inp, atom, kind, next_min)?;
-                                let builder: &mut Builder<'_, '_, '_, $lang_name> = inp.state();
+                                let builder= inp.state();
                                 builder.start_node_at(lhs_cp, kind);
                                 builder.finish_node();
                                 lhs_cp = rhs_cp;
@@ -247,7 +247,7 @@ macro_rules! define_pratt_ext {
                                     inp.rewind(checkpoint);
                                     break;
                                 }
-                                let builder: &mut Builder<'_, '_, '_, $lang_name> = inp.state();
+                                let builder = inp.state();
                                 builder.start_node_at(lhs_cp, kind);
                                 builder.finish_node();
                                 continue;
@@ -261,7 +261,13 @@ macro_rules! define_pratt_ext {
                     Ok(lhs_cp)
                 }
 
+                let cp =  inp.state().checkpoint();
                 let _root_cp = go(inp, &self.atom, self.kind, 0)?;
+                let builder = inp.state();
+                builder.start_node_at(cp, self.kind);
+                builder.finish_node();
+
+
                 Ok(())
             }
         }
