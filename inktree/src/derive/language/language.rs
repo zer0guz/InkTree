@@ -25,13 +25,13 @@ use crate::{
 #[derive(Debug, Snafu)]
 pub enum Error {
     #[snafu(display(
-        "attributes have to be provided by placing them into tree_gen() SCOPE TODO: {}",
+        "attributes have to be provided by placing them into inktree() SCOPE TODO: {}",
         source
     ))]
     Data { source: syn::Error },
 
     #[snafu(display(
-        "attributes have to be provided by placing them into tree_gen() SCOPE TODO: {}",
+        "attributes have to be provided by placing them into inktree() SCOPE TODO: {}",
         source
     ))]
     Repr { source: syn::Error },
@@ -40,7 +40,7 @@ pub enum Error {
     Custom { source: syn::Error },
 
     #[snafu(display(
-        "attributes have to be provided by placing them into tree_gen() SCOPE TODO: {}",
+        "attributes have to be provided by placing them into inktree() SCOPE TODO: {}",
         source
     ))]
     #[snafu(context(false))]
@@ -96,30 +96,30 @@ impl Language {
         let variant_count = self.elements.len() as u32;
         let root_ident = self.root_idents.iter().next().expect("already checked");
         quote! {
-            impl ::tree_gen::cstree::Syntax for #ident {
-                fn from_raw(raw: tree_gen::cstree::RawSyntaxKind) -> Self {
-                    <Self as ::tree_gen::Syntax>::from_raw(raw)
+            impl ::inktree::cstree::Syntax for #ident {
+                fn from_raw(raw: inktree::cstree::RawSyntaxKind) -> Self {
+                    <Self as ::inktree::Syntax>::from_raw(raw)
                 }
 
-                fn into_raw(self) -> tree_gen::cstree::RawSyntaxKind {
-                    <Self as ::tree_gen::Syntax>::into_raw(self)
+                fn into_raw(self) -> inktree::cstree::RawSyntaxKind {
+                    <Self as ::inktree::Syntax>::into_raw(self)
                 }
 
                 fn static_text(self) -> Option<&'static str> {
-                    <Self as ::tree_gen::Syntax>::static_text(self)
+                    <Self as ::inktree::Syntax>::static_text(self)
                 }
             }
 
-            impl ::tree_gen::Syntax for #ident {
+            impl ::inktree::Syntax for #ident {
                 type Root = #root_ident;
-                fn from_raw(raw: ::tree_gen::cstree::RawSyntaxKind) -> Self {
+                fn from_raw(raw: ::inktree::cstree::RawSyntaxKind) -> Self {
                     assert!(raw.0 < #variant_count, "Invalid raw syntax kind: {}", raw.0);
                     // Safety: discriminant is valid by the assert above
                     unsafe { ::std::mem::transmute::<u32, #ident>(raw.0) }
                 }
 
-                fn into_raw(self) -> ::tree_gen::cstree::RawSyntaxKind {
-                    ::tree_gen::cstree::RawSyntaxKind(self as u32)
+                fn into_raw(self) -> ::inktree::cstree::RawSyntaxKind {
+                    ::inktree::cstree::RawSyntaxKind(self as u32)
                 }
 
                 fn static_text(self) -> ::core::option::Option<&'static str> {
@@ -132,17 +132,17 @@ impl Language {
 
                 fn parser<'src, 'cache, 'interner,'borrow,'extra, Err>(
                     self,
-                ) -> impl ::tree_gen::chumsky_ext::BuilderParser<'src, 'cache, 'interner,'borrow, (), Err, Self> + Clone + 'extra
+                ) -> impl ::inktree::chumsky_ext::BuilderParser<'src, 'cache, 'interner,'borrow, (), Err, Self> + Clone + 'extra
                 where
-                    Err: ::tree_gen::chumsky::error::Error<'src, &'src str> + 'extra,
+                    Err: ::inktree::chumsky::error::Error<'src, &'src str> + 'extra,
                     'interner: 'cache,
                     'borrow: 'interner,
                     'src: 'extra,
                     'cache: 'extra,
 
                 {
-                    use ::tree_gen::chumsky::prelude::*;
-                    use ::tree_gen::Parseable;
+                    use ::inktree::chumsky::prelude::*;
+                    use ::inktree::Parseable;
                     match self {
                         #( #parsers )*
                     }
@@ -156,7 +156,7 @@ impl Language {
         let extras = &self.extras;
 
         quote! {
-            ::tree_gen::make_sink!(#lang_ident, [ #( #extras ),* ]);
+            ::inktree::make_sink!(#lang_ident, [ #( #extras ),* ]);
         }
     }
 
@@ -183,7 +183,7 @@ impl Language {
         .map_err(Error::from)?;
 
         let mut stream = quote! {
-            use tree_gen::Parseable;
+            use inktree::Parseable;
         };
 
         if !self.extras.is_empty() {
@@ -222,7 +222,7 @@ impl Language {
         }
 
         quote! {
-            ::tree_gen::define_pratt_ext!(
+            ::inktree::define_pratt_ext!(
                 TestLang,
                 prefix: [ #( #prefix_ops, )* ],
                 infix: [ #( #infix_ops, )* ],
@@ -254,7 +254,7 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
             if attr.path().is_ident("repr") {
                 repr.push(*attr);
             }
-            attr.path().is_ident("tree_gen")
+            attr.path().is_ident("inktree")
         })
         .map(|attribute| {
             language.handle_element(Element::from_attribute(&attribute).map_err(Error::from)?)

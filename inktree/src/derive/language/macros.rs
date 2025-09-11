@@ -17,8 +17,8 @@ macro_rules! make_parser {
             'cache: 'extra
 
         {
-            use tree_gen::chumsky_ext::*;
-            use tree_gen::chumsky::prelude::*;
+            use inktree::chumsky_ext::*;
+            use inktree::chumsky::prelude::*;
             $body
         }
     };
@@ -27,7 +27,7 @@ macro_rules! make_parser {
 #[macro_export]
 macro_rules! impl_type {
     ($lang:ident) => {
-        impl ::tree_gen::chumsky_ext::BuilderParser<
+        impl ::inktree::chumsky_ext::BuilderParser<
             'src, 'cache, 'interner,'borrow, (), Err, $lang
         > + Clone + 'extra
     };
@@ -52,8 +52,8 @@ macro_rules! make_anchored_parser {
             'cache: 'extra
 
         {
-            use tree_gen::chumsky_ext::*;
-            use tree_gen::chumsky::prelude::*;
+            use inktree::chumsky_ext::*;
+            use inktree::chumsky::prelude::*;
 
             $body
         }
@@ -63,9 +63,9 @@ macro_rules! make_anchored_parser {
 #[macro_export]
 macro_rules! parseable {
     ($lang_name:ident::$name:ident, [$($param:ident),*], $body:block) => {
-        impl ::tree_gen::Parseable for $name {
+        impl ::inktree::Parseable for $name {
             type Syntax = $lang_name;
-            tree_gen::make_parser!($lang_name, [$($param),*], $body);
+            inktree::make_parser!($lang_name, [$($param),*], $body);
         }
     };
 }
@@ -162,46 +162,46 @@ macro_rules! define_pratt_ext {
             kind: $lang_name,
         }
 
-        pub type PrattExt<Atom> = ::tree_gen::chumsky::extension::v1::Ext<PrattExt_<Atom>>;
+        pub type PrattExt<Atom> = ::inktree::chumsky::extension::v1::Ext<PrattExt_<Atom>>;
 
         pub fn pratt_ext<Atom>(atom: Atom, kind:  $lang_name) -> PrattExt<Atom> {
-            ::tree_gen::chumsky::extension::v1::Ext(PrattExt_ { atom, kind })
+            ::inktree::chumsky::extension::v1::Ext(PrattExt_ { atom, kind })
         }
 
         impl<'src, 'cache, 'interner, 'borrow,'extra, Err, Atom>
-            ::tree_gen::chumsky::extension::v1::ExtParser<
+            ::inktree::chumsky::extension::v1::ExtParser<
                 'src,
                 &'src str,
                 (),
-                ::tree_gen::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>,
+                ::inktree::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>,
             > for PrattExt_<Atom>
         where
-            Err: ::tree_gen::chumsky::error::Error<'src, &'src str> + 'extra,
-            Atom: ::tree_gen::chumsky_ext::BuilderParser<
+            Err: ::inktree::chumsky::error::Error<'src, &'src str> + 'extra,
+            Atom: ::inktree::chumsky_ext::BuilderParser<
                 'src, 'cache, 'interner, 'borrow, (), Err, $lang_name
             > + Clone,
         {
             fn parse(
                 &self,
-                inp: &mut ::tree_gen::chumsky::input::InputRef<'src,'_,&'src str,::tree_gen::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>>,
+                inp: &mut ::inktree::chumsky::input::InputRef<'src,'_,&'src str,::inktree::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>>,
             ) -> Result<(), Err> {
-                use ::tree_gen::engine::Builder;
-                use ::tree_gen::chumsky_ext::*;
+                use ::inktree::engine::Builder;
+                use ::inktree::chumsky_ext::*;
 
                 fn go<'src, 'cache, 'interner, 'borrow,'extra, Err, Atom>(
-                    inp: &mut ::tree_gen::chumsky::input::InputRef<
+                    inp: &mut ::inktree::chumsky::input::InputRef<
                         'src,
                         '_,
                         &'src str,
-                        ::tree_gen::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>,
+                        ::inktree::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>,
                     >,
                     atom: &Atom,
                     kind: $lang_name,
                     min_power: u16,
-                ) -> Result<::tree_gen::cstree::build::Checkpoint, Err>
+                ) -> Result<::inktree::cstree::build::Checkpoint, Err>
                 where
-                    Err: ::tree_gen::chumsky::error::Error<'src, &'src str> + 'extra,
-                    Atom: ::tree_gen::chumsky_ext::BuilderParser<
+                    Err: ::inktree::chumsky::error::Error<'src, &'src str> + 'extra,
+                    Atom: ::inktree::chumsky_ext::BuilderParser<
                         'src, 'cache, 'interner, 'borrow, (), Err, $lang_name
                     > + Clone,
                 {

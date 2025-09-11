@@ -139,11 +139,11 @@ impl LanguageElement for Token {
         // let impl_code = token_impl(&self.name, &language.ident, parser);
         if language.extras.is_empty() || self.is_extra {
             Ok(quote! {
-               tree_gen::token!(#lang_ident::#ident,{#parser});
+               inktree::token!(#lang_ident::#ident,{#parser});
             })
         } else {
             Ok(quote! {
-               tree_gen::token!(#lang_ident::#ident,{#parser},has_extras);
+               inktree::token!(#lang_ident::#ident,{#parser},has_extras);
             })
         }
     }

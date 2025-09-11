@@ -6,7 +6,7 @@ pub mod incremental;
 mod util;
 
 #[cfg(feature = "derive")]
-pub use tree_gen_derive::SyntaxGenerator;
+pub use inktree_derive::SyntaxGenerator;
 
 pub use chumsky;
 pub use cstree;

@@ -1,5 +1,5 @@
 [package]
-name = "tree_gen_derive"
+name = "inktree-derive"
 version = "0.1.0"
 edition = "2024"
 
@@ -10,4 +10,4 @@ proc-macro = true
 syn = { version = "2.0" }
 quote = "1.0"
 proc-macro2 = "1.0"
-tree_gen = { version = "0.1.0", path = "../tree_gen" }
+inktree = { version = "0.1.0", path = "../inktree" }

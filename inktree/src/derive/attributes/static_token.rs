@@ -67,11 +67,11 @@ impl LanguageElement for StaticToken {
 
         if language.extras.is_empty() || self.is_extra {
             Ok(quote! {
-               tree_gen::static_token!(#lang_ident::#ident,#text);
+               inktree::static_token!(#lang_ident::#ident,#text);
             })
         } else {
             Ok(quote! {
-               tree_gen::static_token!(#lang_ident::#ident,#text,has_extras);
+               inktree::static_token!(#lang_ident::#ident,#text,has_extras);
             })
         }
     }

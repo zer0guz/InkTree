@@ -1,12 +1,12 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, parse_macro_input};
-use tree_gen::{
+use inktree::{
     Errors,
     language::{Error, build},
 };
 
-#[proc_macro_derive(SyntaxGenerator, attributes(tree_gen))]
+#[proc_macro_derive(SyntaxGenerator, attributes(inktree))]
 pub fn syntax_generator(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 

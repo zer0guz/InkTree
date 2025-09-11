@@ -55,7 +55,7 @@ impl Element {
         let mut attributes = variant
             .attrs
             .iter()
-            .filter(|attr| attr.meta.path().is_ident("tree_gen"));
+            .filter(|attr| attr.meta.path().is_ident("inktree"));
 
         let Some(attribute) = attributes.next() else {
             return Ok(None);

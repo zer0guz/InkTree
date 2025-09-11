@@ -125,7 +125,7 @@ impl Rule {
             );
 
             let wrapper = quote! {
-                use ::tree_gen::chumsky::recursive::*;
+                use ::inktree::chumsky::recursive::*;
 
                 // one declare for each SCC member
                 #( let mut #decls = Recursive::declare();)*
@@ -141,18 +141,18 @@ impl Rule {
                 quote! {
                     pub struct #name_ident;
                     impl #name_ident {
-                        tree_gen::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
-                        //tree_gen::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
+                        inktree::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
+                        //inktree::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
                     }
-                    tree_gen::parseable!(#lang_ident::#name_ident,  [#(#param_idents),*],{#wrapper});
+                    inktree::parseable!(#lang_ident::#name_ident,  [#(#param_idents),*],{#wrapper});
                 }
             } else {
                 quote! {
                     pub struct #name_ident;
                     impl #name_ident {
-                        tree_gen::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
-                        tree_gen::make_parser!(#lang_ident,[#(#param_idents),*], { #wrapper });
-                        //tree_gen::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
+                        inktree::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
+                        inktree::make_parser!(#lang_ident,[#(#param_idents),*], { #wrapper });
+                        //inktree::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
                     }
                 }
             }
@@ -160,13 +160,13 @@ impl Rule {
             if is_node {
                 quote! {
                     pub struct #name_ident;
-                    tree_gen::parseable!(#lang_ident::#name_ident, [$($param:ident),*],#body);
+                    inktree::parseable!(#lang_ident::#name_ident, [$($param:ident),*],#body);
                 }
             } else {
                 quote! {
                     pub struct #name_ident;
                     impl #name_ident {
-                        tree_gen::make_parser!(#lang_ident,[#(#param_idents),*],{#body});
+                        inktree::make_parser!(#lang_ident,[#(#param_idents),*],{#body});
 
                     }
                 }

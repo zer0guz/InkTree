@@ -226,6 +226,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "inktree"
+version = "0.1.0"
+dependencies = [
+ "chumsky",
+ "cstree",
+ "derivative",
+ "derive_more",
+ "enum_dispatch",
+ "itertools",
+ "proc-macro2",
+ "quote",
+ "regex-syntax 0.8.6",
+ "ropey",
+ "snafu",
+ "strum",
+ "syn 2.0.106",
+]
+
+[[package]]
+name = "inktree-derive"
+version = "0.1.0"
+dependencies = [
+ "inktree",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
+]
+
+[[package]]
 name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -270,8 +299,8 @@ checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
 name = "mytest"
 version = "0.1.0"
 dependencies = [
- "tree_gen",
- "tree_gen_derive",
+ "inktree",
+ "inktree-derive",
 ]
 
 [[package]]
@@ -510,35 +539,6 @@ name = "text-size"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f18aa187839b2bdb1ad2fa35ead8c4c2976b64e4363c386d45ac0f7ee85c9233"
-
-[[package]]
-name = "tree_gen"
-version = "0.1.0"
-dependencies = [
- "chumsky",
- "cstree",
- "derivative",
- "derive_more",
- "enum_dispatch",
- "itertools",
- "proc-macro2",
- "quote",
- "regex-syntax 0.8.6",
- "ropey",
- "snafu",
- "strum",
- "syn 2.0.106",
-]
-
-[[package]]
-name = "tree_gen_derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.106",
- "tree_gen",
-]
 
 [[package]]
 name = "triomphe"
