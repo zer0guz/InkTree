@@ -2,6 +2,9 @@
 name = "inktree"
 version = "0.1.0"
 edition = "2024"
+description = "An incremental syntax tree engine for fast, expressive language tooling in Rust"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/zer0guz/inktree"
 
 [dependencies]
 chumsky = { version = "0.11.0", features = ["extension", "pratt"] }
