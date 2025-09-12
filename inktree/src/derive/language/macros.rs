@@ -205,42 +205,35 @@ macro_rules! define_pratt_ext {
                         'src, 'cache, 'interner, 'borrow, (), Err, $lang_name
                     > + Clone,
                 {
-                    use $crate::chumsky::pratt::*;
-                    let mut lhs_cp = inp.parse(&atom.clone().with_cp())?;
+                    // NUD: prefix-or-atom (once)
+                    let mut lhs_cp = 'nud: {
+                        let inp_cp = inp.save();
 
+                        // try exactly one prefix; chains/nesting happen in recursive `go`
+                        $(
+                            {
+                                // capture BEFORE consuming the prefix token so the node includes it
+                                let cp = inp.state().checkpoint();
+                                if let Ok(_) = inp.parse($p_parser) {
+                                    let _ = go(inp, atom, kind, $p_prec)?;
+                                    let builder = inp.state();
+                                    builder.start_node_at(cp, kind);
+                                    builder.finish_node();
+                                    break 'nud cp; // the expression starts at the prefix position
+                                }
+                            }
+                        )*
+
+                        // no prefix matched: rewind and parse atom
+                        inp.rewind(inp_cp);
+                        break 'nud inp.parse(&atom.clone().with_cp())?;
+                    };
+
+                    // LED: postfix + infix climbing loop
                     loop {
                         let checkpoint = inp.save();
 
-                        // prefix ops
-                        $(
-                            if let Ok(_) = inp.parse($p_parser) {
-                                let rhs_cp = go(inp, atom, kind, $p_prec)?;
-                                let builder = inp.state();
-                                builder.start_node_at(rhs_cp, kind);
-                                builder.finish_node();
-                                lhs_cp = rhs_cp;
-                                continue;
-                            }
-                        )*
-
-                        // infix ops
-                        $(
-                            if let Ok(_) = inp.parse($i_parser) {
-                                if $i_prec < min_power {
-                                    inp.rewind(checkpoint);
-                                    break;
-                                }
-                                let next_min = $crate::pratt_next_min_power!($i_prec, $i_assoc);
-                                let rhs_cp = go(inp, atom, kind, next_min)?;
-                                let builder= inp.state();
-                                builder.start_node_at(lhs_cp, kind);
-                                builder.finish_node();
-                                lhs_cp = rhs_cp;
-                                continue;
-                            }
-                        )*
-
-                        // postfix ops
+                        // postfix
                         $(
                             if let Ok(_) = inp.parse($x_parser) {
                                 if $x_prec < min_power {
@@ -248,8 +241,28 @@ macro_rules! define_pratt_ext {
                                     break;
                                 }
                                 let builder = inp.state();
+                                // wrap from the start of the current expression
                                 builder.start_node_at(lhs_cp, kind);
                                 builder.finish_node();
+                                continue;
+                            }
+                        )*
+
+                        // infix
+                        $(
+                            if let Ok(_) = inp.parse($i_parser) {
+                                if $i_prec < min_power {
+                                    inp.rewind(checkpoint);
+                                    break;
+                                }
+                                let next_min = $crate::pratt_next_min_power!($i_prec, $i_assoc);
+
+                                // parse RHS; the combined node still starts at lhs_cp
+                                let _ = go(inp, atom, kind, next_min)?;
+                                let builder = inp.state();
+                                builder.start_node_at(lhs_cp, kind);
+                                builder.finish_node();
+                                // lhs_cp stays as the start of the whole (lhs op rhs)
                                 continue;
                             }
                         )*
