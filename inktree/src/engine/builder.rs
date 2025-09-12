@@ -51,9 +51,9 @@ where
 
     fn on_rewind<'parse>(
         &mut self,
-        _marker: &chumsky::input::Checkpoint<'src, 'parse, &'src str, Self::Checkpoint>,
+        marker: &chumsky::input::Checkpoint<'src, 'parse, &'src str, Self::Checkpoint>,
     ) {
-        //self.builder.revert_to(*marker.inspector());
+        self.builder.revert_to(*marker.inspector());
     }
 }
 
