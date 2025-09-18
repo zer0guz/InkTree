@@ -18,7 +18,7 @@ use crate::{
         parser::{DslExpr, FromMeta, ParserCtx},
         properties::{Property, PropertyKind},
     },
-    language::{ElementError, Language, LanguageElement},
+    language::{ElementError, Language, LanguageElement}, AstShape,
 };
 
 #[derive(Debug, From)]
@@ -53,7 +53,7 @@ impl Rule {
             HashSet::new()
         };
 
-        let ctx = ParserCtx::new(&language.idents, &self.parameters, anchored);
+        let ctx = ParserCtx::new(&language.ast_shapes, &self.parameters, anchored);
 
         self.dsl.parser(&ctx)
     }
@@ -256,5 +256,9 @@ impl LanguageElement for Rule {
         language.cycle_graph.add_rule(self.name.clone(), deps);
 
         Ok(())
+    }
+    
+    fn ast_shape(&self,language: &Language) -> Option<AstShape> {
+        None
     }
 }

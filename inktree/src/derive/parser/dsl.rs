@@ -5,7 +5,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{chumsky::prelude::*, derive::attributes::Rule};
+use crate::{AstShape, chumsky::prelude::*, derive::attributes::Rule};
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum DslExpr {
@@ -14,7 +14,7 @@ pub enum DslExpr {
     Opt(Box<DslExpr>),
     Star(Box<DslExpr>),
     Plus(Box<DslExpr>),
-    Alt(Box<DslExpr>, Box<DslExpr>),
+    Alt(Vec<DslExpr>),
     Call { name: Ident, args: Vec<DslExpr> },
 }
 
@@ -50,21 +50,20 @@ impl<'a> CallShape<'a> {
         CallShape::<'a> { callee, args: args }
     }
 }
-
 pub struct ParserCtx<'a> {
-    pub idents: &'a HashSet<Ident>,
+    pub ast_shapes: &'a HashMap<Ident, Option<AstShape>>,
     pub parameters: &'a HashSet<Ident>,
     pub anchored: HashSet<Ident>,
 }
 
 impl<'a> ParserCtx<'a> {
     pub fn new(
-        idents: &'a HashSet<Ident>,
+        ast_shapes: &'a HashMap<Ident, Option<AstShape>>,
         parameters: &'a HashSet<Ident>,
         anchored: HashSet<Ident>,
     ) -> Self {
         Self {
-            idents,
+            ast_shapes,
             parameters,
             anchored,
         }
@@ -105,10 +104,10 @@ impl DslExpr {
                 quote! { #p.repeated().at_least(1) }
             }
 
-            DslExpr::Alt(a, b) => {
-                let pa = a.parser(ctx);
-                let pb = b.parser(ctx);
-                quote! { #pa.or(#pb) }
+            DslExpr::Alt(exprs) => {
+                let mut it = exprs.iter().map(|e| e.parser(ctx));
+                let first = it.next().unwrap();
+                it.fold(first, |acc, p| quote! { #acc.or(#p) })
             }
 
             DslExpr::Call { name, args } => {
@@ -125,12 +124,21 @@ impl DslExpr {
         }
 
         // ---- not in same SCC ----
-        if let Some(ident) = ctx.idents.get(name) {
-            quote! { #ident::parser(#(#arg_tokens),*) }
-        } else if let Some(ident) = ctx.parameters.get(name) {
-            quote! { #ident.clone() }
+        if let Some(maybe_shape) = ctx.ast_shapes.get(name) {
+            match maybe_shape {
+                Some(AstShape::Token) => {
+                    // call token parser
+                    quote! { #name::parser() }
+                }
+                _ => {
+                    // call node parser with args
+                    quote! { #name::parser(#(#arg_tokens),*) }
+                }
+            }
+        } else if ctx.parameters.contains(name) {
+            quote! { #name.clone() }
         } else {
-            panic!("unknown rule {name:?}")
+            panic!("unknown rule {name:?}");
         }
     }
 
@@ -150,9 +158,10 @@ impl DslExpr {
             DslExpr::Opt(inner) | DslExpr::Star(inner) | DslExpr::Plus(inner) => {
                 inner.collect_deps(parameters, deps);
             }
-            DslExpr::Alt(a, b) => {
-                a.collect_deps(parameters, deps);
-                b.collect_deps(parameters, deps);
+            DslExpr::Alt(alts) => {
+                for expr in alts {
+                    expr.collect_deps(parameters, deps);
+                }
             }
             DslExpr::Call { name, args } => {
                 // Always add the callee
@@ -176,7 +185,7 @@ impl DslExpr {
             DslExpr::Seq(items) => items.iter().all(|e| e.nullable_with(nullable)),
             DslExpr::Opt(_) | DslExpr::Star(_) => true,
             DslExpr::Plus(inner) => inner.nullable_with(nullable),
-            DslExpr::Alt(a, b) => a.nullable_with(nullable) || b.nullable_with(nullable),
+            DslExpr::Alt(exprs) => exprs.iter().any(|e| e.nullable_with(nullable)),
         }
     }
 
@@ -241,9 +250,10 @@ impl DslExpr {
                 }
             }
 
-            DslExpr::Alt(a, b) => {
-                a.first_nonterminals_with(origin, nullable, rules, subst, out, visiting);
-                b.first_nonterminals_with(origin, nullable, rules, subst, out, visiting);
+            DslExpr::Alt(exprs) => {
+                for expr in exprs {
+                    expr.first_nonterminals_with(origin, nullable, rules, subst, out, visiting);
+                }
             }
 
             DslExpr::Opt(inner) | DslExpr::Star(inner) | DslExpr::Plus(inner) => {
@@ -252,11 +262,11 @@ impl DslExpr {
         }
     }
 }
-
 pub fn dsl_parser<'a>() -> impl Parser<'a, &'a [DslToken], DslExpr> {
     recursive(|expr| {
         let ident = select! { DslToken::Ident(s) => Ident::new(&s, Span::call_site()) };
 
+        // Calls: Foo<Arg1, Arg2, ...>
         let call = ident
             .clone()
             .then_ignore(just(DslToken::Lt))
@@ -268,6 +278,7 @@ pub fn dsl_parser<'a>() -> impl Parser<'a, &'a [DslToken], DslExpr> {
             .then_ignore(just(DslToken::Gt))
             .map(|(name, args)| DslExpr::Call { name, args });
 
+        // Atoms: ident, call, or (expr)
         let atom = call
             .or(ident.map(DslExpr::Just))
             .or(expr
@@ -275,13 +286,14 @@ pub fn dsl_parser<'a>() -> impl Parser<'a, &'a [DslToken], DslExpr> {
                 .delimited_by(just(DslToken::LParen), just(DslToken::RParen)))
             .boxed();
 
+        // Unary postfix operators: ?, *, +
         let unary = atom
             .clone()
             .then(
                 choice((
-                    just(DslToken::Question).map(|_| UnOp::Opt),
-                    just(DslToken::Star).map(|_| UnOp::Star),
-                    just(DslToken::Plus).map(|_| UnOp::Plus),
+                    just(DslToken::Question).to(UnOp::Opt),
+                    just(DslToken::Star).to(UnOp::Star),
+                    just(DslToken::Plus).to(UnOp::Plus),
                 ))
                 .repeated()
                 .collect::<Vec<_>>(),
@@ -294,37 +306,30 @@ pub fn dsl_parser<'a>() -> impl Parser<'a, &'a [DslToken], DslExpr> {
                 })
             });
 
+        // Sequence: one or more unaries
         let seq = unary
             .clone()
-            .then(unary.clone().repeated().collect::<Vec<_>>())
-            .map(|(first, rest)| {
-                if rest.is_empty() {
-                    first
+            .repeated()
+            .at_least(1)
+            .collect::<Vec<_>>()
+            .map(|mut items| {
+                if items.len() == 1 {
+                    items.pop().unwrap()
                 } else {
-                    let mut v = Vec::with_capacity(1 + rest.len());
-                    v.push(first);
-                    v.extend(rest);
-                    DslExpr::Seq(v)
+                    DslExpr::Seq(items)
                 }
             })
             .boxed();
 
-        seq.clone()
-            .then(
-                just(DslToken::Pipe)
-                    .ignore_then(seq.clone())
-                    .repeated()
-                    .collect::<Vec<_>>(),
-            )
-            .map(|(first, mut rest)| {
-                if rest.is_empty() {
-                    first
+        // Alternation: one or more seqs separated by `|`
+        seq.separated_by(just(DslToken::Pipe))
+            .at_least(1)
+            .collect::<Vec<_>>()
+            .map(|mut items: Vec<_>| {
+                if items.len() == 1 {
+                    items.pop().unwrap()
                 } else {
-                    let mut nested = rest.pop().unwrap();
-                    for elt in rest.into_iter().rev() {
-                        nested = DslExpr::Alt(Box::new(elt), Box::new(nested));
-                    }
-                    DslExpr::Alt(Box::new(first), Box::new(nested))
+                    DslExpr::Alt(items)
                 }
             })
             .boxed()
@@ -410,10 +415,8 @@ mod tests {
             id_tok("z"),
         ];
         let expr = dsl_parser().parse(&tokens).unwrap();
-        let expected = DslExpr::Alt(
-            Box::new(id_expr("x")),
-            Box::new(DslExpr::Alt(Box::new(id_expr("y")), Box::new(id_expr("z")))),
-        );
+        let expected = DslExpr::Alt(vec![id_expr("x"), id_expr("y"), id_expr("z")]);
+
         assert_eq!(expr, expected);
     }
 
@@ -481,10 +484,8 @@ mod tests {
     fn test_parse_alt() {
         let tokens = dsl_lexer().parse("x|y|z").unwrap();
         let expr = dsl_parser().parse(&tokens).unwrap();
-        let expected = DslExpr::Alt(
-            Box::new(id_expr("x")),
-            Box::new(DslExpr::Alt(Box::new(id_expr("y")), Box::new(id_expr("z")))),
-        );
+        let expected = DslExpr::Alt(vec![id_expr("x"), id_expr("y"), id_expr("z")]);
+
         assert_eq!(expr, expected);
     }
 

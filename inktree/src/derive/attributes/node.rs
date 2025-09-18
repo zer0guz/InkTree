@@ -3,16 +3,16 @@ use std::collections::HashSet;
 use chumsky::Parser;
 use derive_more::From;
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{Ident, MetaList};
 
 use crate::{
     derive::{
         attributes::{allowed::ALLOWED_NODE, rule::Rule},
-        parser::{FromMeta, dsl_lexer, dsl_parser},
+        parser::{dsl_lexer, dsl_parser, FromMeta},
         properties::{Property, PropertyKind},
     },
-    language::{ElementError, Language, LanguageElement},
+    language::{ElementError, Language, LanguageElement}, AstGenCtx, AstShape,
 };
 
 #[derive(Debug, From)]
@@ -50,8 +50,21 @@ impl LanguageElement for Node {
         let lang_ident = &language.ident;
 
         let code = self.0.parser_body(language);
+
+        // let mut ctx = AstGenCtx::new();
+        // let main_shape = self.0.dsl.ast_shape(name, &mut ctx);
+        // let mut shapes = ctx.helpers;
+        // shapes.push(main_shape);    
+
+        // let ast_defs: Vec<TokenStream> = shapes
+        //     .into_iter()
+        //     .map(|shape| shape.codegen(lang_ident,name))
+        //     .collect();
+
         Ok(quote! {
-            node!(#lang_ident::#name,{#code});
+            ::inktree::node!(#lang_ident::#name,{#code});
+            //#(#ast_defs)*
+
         })
     }
 
@@ -69,5 +82,9 @@ impl LanguageElement for Node {
         language: &mut Language,
     ) -> Result<(), ElementError> {
         self.0.build(properties, language)
+    }
+    
+    fn ast_shape(&self,language: &Language) -> Option<AstShape> {
+        None
     }
 }

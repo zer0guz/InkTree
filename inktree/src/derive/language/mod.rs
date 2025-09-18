@@ -1,6 +1,5 @@
 mod element;
 mod language;
-mod macros;
 mod parseable;
 pub mod rule_graph;
 mod syntax;

@@ -19,7 +19,7 @@ regex-syntax = "0.8.5"
 ropey = "1.6.1"
 snafu = "0.8.6"
 strum = { version = "0.27.1", features = ["derive"] }
-syn = "2.0.101"
+syn = { version = "2.0.101", features = ["extra-traits"] }
 
 [features]
 default = []

@@ -1,4 +1,4 @@
-use crate::derive::attributes::*;
+use crate::{derive::attributes::*, AstShape};
 use enum_dispatch::enum_dispatch;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
@@ -110,16 +110,11 @@ impl Element {
     pub fn build(&mut self, language: &mut Language) -> Result<(), Errors<ElementError>> {
         let name = self.attribute.name().clone();
 
-        if language
-            .elements
-            .iter()
-            .find(|a| a.attribute.name() == &name)
-            .is_some()
-        {
-            todo!("error todo redefined")
-        };
-
-        language.idents.insert(name);
+        if language.ast_shapes.contains_key(&name) {
+            return Err(syn::Error::new_spanned(&name, "redefined language element todo"))
+                .context(UnsupportedSnafu)
+                .map_err(Errors::from)?;
+        }
 
         self.properties
             .iter()
@@ -141,6 +136,9 @@ impl Element {
         };
 
         self.attribute.build(&self.properties, language)?;
+
+        let shape = self.attribute.ast_shape(language);
+        language.ast_shapes.insert(name.clone(), shape);
 
         return Ok(());
     }
@@ -174,4 +172,6 @@ pub trait LanguageElement: Sized {
     fn name(&self) -> &Ident;
 
     fn allowed(&self) -> &'static [PropertyKind];
+
+    fn ast_shape(&self, language: &Language) -> Option<AstShape>;
 }

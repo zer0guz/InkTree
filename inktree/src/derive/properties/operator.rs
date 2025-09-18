@@ -30,6 +30,15 @@ impl Operator {
         let parser = quote! {#op_ident::parser().with_cp()};
         self.kind.pratt(parser)
     }
+    pub fn is_prefix(&self) -> bool {
+        matches!(self.kind, OperatorKind::Prefix(_))
+    }
+    pub fn is_infix(&self) -> bool {
+        matches!(self.kind, OperatorKind::Infix(_))
+    }
+    pub fn is_postfix(&self) -> bool {
+        matches!(self.kind, OperatorKind::Postfix(_))
+    }
 }
 
 #[enum_dispatch]

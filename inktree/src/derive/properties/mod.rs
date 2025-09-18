@@ -1,3 +1,4 @@
+mod ast;
 mod delimiters;
 mod extra;
 mod keyword;
@@ -9,7 +10,7 @@ mod whitespace;
 use std::str::FromStr;
 
 use derive_more::From;
-use strum::{EnumDiscriminants, EnumString, EnumTryAs};
+use strum::{EnumDiscriminants, EnumString};
 use syn::Meta;
 
 pub use extra::*;
@@ -20,14 +21,13 @@ use crate::{
     derive::{
         parser::FromMeta,
         properties::{
-            extra::Extra,
-            operator::{Infix, Postfix, Prefix},
+            ast::Ast, extra::Extra, operator::{Infix, Postfix, Prefix}
         },
     },
     language::ElementError,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumDiscriminants, From, EnumTryAs)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, EnumDiscriminants, From)]
 #[strum_discriminants(vis(pub), strum(serialize_all = "snake_case"))]
 #[strum_discriminants(name(PropertyKind), derive(EnumString))]
 pub enum Property {
@@ -41,6 +41,7 @@ pub enum Property {
     // DelimitedBy(DelimitedBy),
     // Whitespace(Whitespace),
     Extra(Extra),
+    Ast(Ast),
 }
 impl Property {
     pub fn try_as_operator(&self) -> Option<OperatorKind> {
@@ -60,22 +61,30 @@ impl Property {
             Err(syn::Error::new_spanned(kind, "unsupported todo text").into())
         }
     }
+    pub fn try_as_extra(&self) -> Option<Extra> {
+        match self {
+            Property::Extra(extra) => Some(*extra),
+            _ => None
+        }
+    }
+    pub fn is_ignored(&self) -> bool {
+        match self {
+            Property::Ast(Ast::Ignored) => true,
+            _ => false
+        }
+    }
 }
 
 impl PropertyKind {
     pub fn from_meta(self, meta: &Meta) -> Result<Property, ElementError> {
         use PropertyKind as Pk;
         match self {
-            // Pk::Keyword => Ok(Keyword::from_meta(meta, None)?.into()),
             Pk::Root => Ok(Root::from_meta(meta, None)?.into()),
             Pk::OpPrefix => Ok(Prefix::from_meta(meta, None)?.into()),
             Pk::OpInfix => Ok(Infix::from_meta(meta, None)?.into()),
             Pk::OpPostfix => Ok(Postfix::from_meta(meta, None)?.into()),
-            // Pk::Padded => Ok(Padded::from_meta(meta, None)?.into()),
-            // Pk::PaddedBy => Ok(PaddedBy::from_meta(meta, None)?.into()),
-            // Pk::DelimitedBy => Ok(DelimitedBy::from_meta(meta, None)?.into()),
-            // Pk::Whitespace => Ok(Whitespace::from_meta(meta, None)?.into()),
             Pk::Extra => Ok(Extra::from_meta(meta, None)?.into()),
+            Pk::Ast => Ok(Ast::from_meta(meta, None)?.into()),
         }
     }
 }

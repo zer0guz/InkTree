@@ -1,9 +1,9 @@
 use crate::{
     derive::{attributes::SyntaxAttributeKind, properties::OperatorKind},
     language::rule_graph::{RecursionInfo, RuleGraph},
-    util::{Handle, Pool},
+    util::{Handle, Pool}, AstShape,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap};
 
 use proc_macro2::TokenStream;
 use snafu::{ResultExt, Snafu};
@@ -52,7 +52,7 @@ pub(crate) struct Language {
     pub ident: Ident,
     pub operators: Vec<Operator>,
     pub root_idents: Vec<Ident>,
-    pub idents: HashSet<Ident>,
+    pub ast_shapes: HashMap<Ident, Option<AstShape>>, 
     pub cycle_graph: RuleGraph,
     pub recursion_info: Option<RecursionInfo>,
     pub rules: Vec<Handle<Element>>,
@@ -236,7 +236,7 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
     let mut language = Language {
         elements: Pool::with_capacity(input.attrs.len() as u32),
         ident: input.ident.clone(),
-        idents: HashSet::new(),
+        ast_shapes: HashMap::new(),
         operators: vec![],
         root_idents: vec![],
         cycle_graph: RuleGraph::new(),

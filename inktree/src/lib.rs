@@ -16,3 +16,5 @@ pub use error::Errors;
 
 pub use derive::language::Parseable;
 pub use derive::language::Syntax;
+
+pub use derive::AstToken;

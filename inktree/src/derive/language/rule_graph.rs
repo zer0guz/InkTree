@@ -259,10 +259,7 @@ mod tests {
 
     #[test]
     fn test_direct_left_recursion() {
-        let rules = make_rules(vec![(
-            "A",
-            DslExpr::Alt(Box::new(just("A")), Box::new(just("t"))),
-        )]);
+        let rules = make_rules(vec![("A", DslExpr::Alt(vec![just("A"), just("t")]))]);
         let mut rg = RuleGraph::new();
         rg.add_rule(ident("A"), [ident("A")].into_iter().collect());
         let info = rg.into_recursive_info(&wrap(&rules));
@@ -301,7 +298,7 @@ mod tests {
         let rules = make_rules(vec![
             ("A", just("B")),
             ("B", just("C")),
-            ("C", DslExpr::Alt(Box::new(just("A")), Box::new(just("t")))),
+            ("C", DslExpr::Alt(vec![just("A"), just("t")])),
         ]);
         let mut rg = RuleGraph::new();
         rg.add_rule(ident("A"), [ident("B")].into_iter().collect());
@@ -318,10 +315,7 @@ mod tests {
         // A -> ε | A
         let rules = make_rules(vec![(
             "A",
-            DslExpr::Alt(
-                Box::new(DslExpr::Opt(Box::new(just("eps")))),
-                Box::new(just("A")),
-            ),
+            DslExpr::Alt(vec![DslExpr::Opt(Box::new(just("eps"))), just("A")]),
         )]);
         let mut rg = RuleGraph::new();
         rg.add_rule(ident("A"), [ident("A")].into_iter().collect());
@@ -335,7 +329,7 @@ mod tests {
         // B -> B | t
         let rules = make_rules(vec![
             ("A", DslExpr::Seq(vec![just("t"), just("B")])),
-            ("B", DslExpr::Alt(Box::new(just("B")), Box::new(just("t")))),
+            ("B", DslExpr::Alt(vec![just("B"), just("t")])),
         ]);
         let mut rg = RuleGraph::new();
         rg.add_rule(ident("A"), [ident("B")].into_iter().collect());
@@ -344,19 +338,20 @@ mod tests {
         assert!(!info.is_left_recursive(&ident("A"))); // safe
         assert!(info.is_left_recursive(&ident("B"))); // left-recursive self
     }
+
     #[test]
     fn test_direct_param_recursion() {
         // A<T> = A<T> | T
         let a_ident = ident("A");
         let rules = make_rules(vec![(
             "A",
-            DslExpr::Alt(
-                Box::new(DslExpr::Call {
+            DslExpr::Alt(vec![
+                DslExpr::Call {
                     name: a_ident.clone(),
                     args: vec![just("T")],
-                }),
-                Box::new(just("T")),
-            ),
+                },
+                just("T"),
+            ]),
         )]);
 
         let mut rg = RuleGraph::new();
@@ -365,6 +360,7 @@ mod tests {
 
         assert!(info.is_left_recursive(&a_ident));
     }
+
     #[test]
     fn test_mutual_param_recursion() {
         // A<T> = B<T>

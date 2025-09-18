@@ -3,6 +3,7 @@ use quote::quote;
 use syn::{Ident, Lit, LitStr, MetaList};
 
 use crate::{
+    AstShape,
     derive::{
         attributes::allowed::ALLOWED_STATIC_TOKEN,
         parser::FromMeta,
@@ -15,6 +16,7 @@ pub struct StaticToken {
     pub text: String,
     name: Ident,
     is_extra: bool,
+    ignored: bool,
 }
 
 impl StaticToken {
@@ -28,6 +30,7 @@ impl StaticToken {
             text,
             name,
             is_extra: false,
+            ignored: false,
         })
     }
 }
@@ -39,6 +42,7 @@ impl FromMeta for StaticToken {
             text: lit.value(),
             name: name.expect("todo name option").clone(),
             is_extra: false,
+            ignored: false,
         }
         .into())
     }
@@ -65,15 +69,25 @@ impl LanguageElement for StaticToken {
         let ident = &self.name;
         let lang_ident = &language.ident;
 
-        if language.extras.is_empty() || self.is_extra {
-            Ok(quote! {
-               inktree::static_token!(#lang_ident::#ident,#text);
-            })
+        // Build the parser macro call
+        let parser_code = if language.extras.is_empty() || self.is_extra {
+            quote! {
+                inktree::static_token!(#lang_ident::#ident, #text);
+            }
         } else {
-            Ok(quote! {
-               inktree::static_token!(#lang_ident::#ident,#text,has_extras);
-            })
-        }
+            quote! {
+                inktree::static_token!(#lang_ident::#ident, #text, has_extras);
+            }
+        };
+
+        // Generate AST wrapper
+        // let ast_shape = AstShape::Token(ident.clone());
+        // let ast_code = ast_shape.codegen(lang_ident, ident);
+
+        Ok(quote! {
+            #parser_code
+            //#ast_code
+        })
     }
 
     fn allowed(&self) -> &'static [PropertyKind] {
@@ -89,17 +103,25 @@ impl LanguageElement for StaticToken {
         properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {
-        properties.iter().for_each(|prop| {
-            if let Some(kind) = prop.try_as_operator() {
+        properties.iter().for_each(|property| {
+            if let Some(kind) = property.try_as_operator() {
                 language.operators.push(Operator {
                     kind: kind,
                     ident: self.name.clone(),
                 });
             } else {
-                self.is_extra = try_handle_extra(&self.name, prop, language);
+                self.is_extra = try_handle_extra(&self.name, property, language);
+                self.ignored = property.is_ignored()
             }
         });
 
         Ok(())
+    }
+
+    fn ast_shape(&self, _language: &Language) -> Option<AstShape> {
+        if self.ignored {
+            return None;
+        }
+        Some(AstShape::Token)
     }
 }

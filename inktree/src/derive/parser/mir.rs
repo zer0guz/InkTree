@@ -7,9 +7,9 @@ use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
 pub enum MirError {
-    #[snafu(display("todo"))]
+    #[snafu(display("todo {:#?}",source))]
     FromHir { source: regex_syntax::Error },
-    #[snafu(display("todo"))]
+    #[snafu(display("todo {:#?}",look))]
     Look { look: Look },
 }
 
@@ -35,7 +35,7 @@ pub enum Mir {
 impl Mir {
     pub fn parse(input: &str) -> Result<Self, MirError> {
         let hir = ParserBuilder::new()
-            .unicode(false)
+            .unicode(true)
             .build()
             .parse(input)
             .context(FromHirSnafu)?;

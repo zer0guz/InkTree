@@ -3,6 +3,7 @@ use quote::quote;
 use syn::{Ident, MetaList};
 
 use crate::{
+    AstShape,
     derive::{
         attributes::{Node, allowed::ALLOWED_PRATT},
         parser::FromMeta,
@@ -43,8 +44,32 @@ impl FromMeta for Pratt {
 impl LanguageElement for Pratt {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
         let code = self.code(language);
+        let lang_ident = &language.ident;
+        let name_ident = self.name();
+
+        // // Build AST shape for Pratt
+        // let ast_shape = AstShape::Pratt {
+        //     atom: name_ident.clone(),
+        //     prefix_ops: language
+        //         .operators
+        //         .iter()
+        //         .filter(|op| {
+        //             op.is_prefix()
+        //         })
+        //         .map(|op| op.ident.clone())
+        //         .collect(),
+        //     infix_ops: language
+        //         .operators
+        //         .iter()
+        //         .filter(|op| op.is_infix())
+        //         .map(|op| op.ident.clone())
+        //         .collect(),
+        // };
+        // let ast_code = ast_shape.codegen(lang_ident, name_ident);
+
         Ok(quote! {
             #code
+            //#ast_code
         })
     }
 
@@ -62,5 +87,9 @@ impl LanguageElement for Pratt {
         language: &mut Language,
     ) -> Result<(), ElementError> {
         self.node.build(properties, language)
+    }
+    
+    fn ast_shape(&self,language: &Language) -> Option<AstShape> {
+        None
     }
 }

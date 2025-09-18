@@ -7,7 +7,7 @@ where
     type Syntax;
 
     fn parser<'src, 'cache, 'interner, 'borrow, 'extra, Err>()
-    -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Self::Syntax> + Clone
+    -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Self::Syntax> + 'extra + Clone
     where
         Err: chumsky::error::Error<'src, &'src str> + 'extra,
         'interner: 'cache,

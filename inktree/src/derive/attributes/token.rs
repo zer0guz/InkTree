@@ -4,6 +4,7 @@ use regex_syntax::hir::Class;
 use syn::{Ident, Lit};
 
 use crate::{
+    AstShape,
     derive::{
         attributes::allowed::ALLOWED_TOKEN,
         parser::{FromMeta, Mir},
@@ -17,6 +18,7 @@ pub struct Token {
     pub expr: Mir,
     name: Ident,
     is_extra: bool,
+    ignored: bool,
 }
 
 impl Token {
@@ -33,6 +35,7 @@ impl Token {
             expr,
             name,
             is_extra: false,
+            ignored: false,
         })
     }
     fn parser(expr: &Mir) -> TokenStream {
@@ -92,7 +95,7 @@ impl Token {
             Mir::Choice(mirs) => {
                 let branches: Vec<_> = mirs.iter().map(Self::parser).collect();
                 quote! {
-                    choice((#(#branches),*))
+                    choice((#(#branches.ignored()),*))
                 }
             }
             Mir::ZeroOrMore(mir) => {
@@ -133,19 +136,25 @@ impl FromMeta for Token {
 impl LanguageElement for Token {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
         let parser = Self::parser(&self.expr);
+        let to_slice = quote! {
+            #parser.to_slice()
+        };
 
         let ident = &self.name;
         let lang_ident = &language.ident;
-        // let impl_code = token_impl(&self.name, &language.ident, parser);
-        if language.extras.is_empty() || self.is_extra {
-            Ok(quote! {
-               inktree::token!(#lang_ident::#ident,{#parser});
-            })
+
+        let parser_code = if language.extras.is_empty() || self.is_extra {
+            quote! { inktree::token!(#lang_ident::#ident,{#to_slice}); }
         } else {
-            Ok(quote! {
-               inktree::token!(#lang_ident::#ident,{#parser},has_extras);
-            })
-        }
+            quote! { inktree::token!(#lang_ident::#ident,{#to_slice},has_extras); }
+        };
+
+        //let ast_code = ast_shape.codegen(lang_ident, ident);
+
+        Ok(quote! {
+            #parser_code
+            //#ast_code
+        })
     }
 
     fn allowed(&self) -> &'static [PropertyKind] {
@@ -161,9 +170,17 @@ impl LanguageElement for Token {
         properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {
-        properties
-            .iter()
-            .for_each(|prop| self.is_extra = try_handle_extra(&self.name, prop, language));
+        properties.iter().for_each(|property| {
+            self.is_extra = try_handle_extra(&self.name, property, language);
+            self.ignored = property.is_ignored()
+        });
         Ok(())
+    }
+
+    fn ast_shape(&self, _language: &Language) -> Option<AstShape> {
+        if self.ignored {
+            return None;
+        }
+        Some(AstShape::Token)
     }
 }

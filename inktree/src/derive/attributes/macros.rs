@@ -149,6 +149,21 @@ macro_rules! make_sink {
 }
 
 #[macro_export]
+macro_rules! node {
+    // without sink
+    ($lang_name:ident :: $name:ident, $body:block) => {
+        pub(crate) struct $name;
+        $crate::parseable!($lang_name::$name, [], {
+            use $crate::chumsky::Parser;
+            use $crate::chumsky::prelude::*;
+            use $crate::chumsky_ext::*;
+            $body.as_node($lang_name::$name)
+        });
+    };
+}
+
+
+#[macro_export]
 macro_rules! define_pratt_ext {
     (
         $lang_name:ident,
