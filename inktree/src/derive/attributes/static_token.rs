@@ -80,13 +80,8 @@ impl LanguageElement for StaticToken {
             }
         };
 
-        // Generate AST wrapper
-        // let ast_shape = AstShape::Token(ident.clone());
-        // let ast_code = ast_shape.codegen(lang_ident, ident);
-
         Ok(quote! {
             #parser_code
-            //#ast_code
         })
     }
 
@@ -118,7 +113,7 @@ impl LanguageElement for StaticToken {
         Ok(())
     }
 
-    fn ast_shape(&self, _language: &Language) -> Option<AstShape> {
+    fn ast_shape(&self, _language: &mut Language) -> Option<AstShape> {
         if self.ignored {
             return None;
         }

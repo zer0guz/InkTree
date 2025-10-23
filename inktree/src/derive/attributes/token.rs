@@ -177,7 +177,7 @@ impl LanguageElement for Token {
         Ok(())
     }
 
-    fn ast_shape(&self, _language: &Language) -> Option<AstShape> {
+    fn ast_shape(&self, _language: &mut Language) -> Option<AstShape> {
         if self.ignored {
             return None;
         }

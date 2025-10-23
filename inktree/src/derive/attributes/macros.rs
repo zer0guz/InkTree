@@ -152,7 +152,7 @@ macro_rules! make_sink {
 macro_rules! node {
     // without sink
     ($lang_name:ident :: $name:ident, $body:block) => {
-        pub(crate) struct $name;
+        pub struct $name;
         $crate::parseable!($lang_name::$name, [], {
             use $crate::chumsky::Parser;
             use $crate::chumsky::prelude::*;

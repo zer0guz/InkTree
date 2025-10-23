@@ -173,5 +173,5 @@ pub trait LanguageElement: Sized {
 
     fn allowed(&self) -> &'static [PropertyKind];
 
-    fn ast_shape(&self, language: &Language) -> Option<AstShape>;
+    fn ast_shape(&self, language: &mut Language) -> Option<AstShape>;
 }

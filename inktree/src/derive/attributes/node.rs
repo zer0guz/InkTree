@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use chumsky::Parser;
 use derive_more::From;
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use quote::{quote};
 use syn::{Ident, MetaList};
 
 use crate::{
@@ -51,11 +51,6 @@ impl LanguageElement for Node {
 
         let code = self.0.parser_body(language);
 
-        // let mut ctx = AstGenCtx::new();
-        // let main_shape = self.0.dsl.ast_shape(name, &mut ctx);
-        // let mut shapes = ctx.helpers;
-        // shapes.push(main_shape);    
-
         // let ast_defs: Vec<TokenStream> = shapes
         //     .into_iter()
         //     .map(|shape| shape.codegen(lang_ident,name))
@@ -84,7 +79,10 @@ impl LanguageElement for Node {
         self.0.build(properties, language)
     }
     
-    fn ast_shape(&self,language: &Language) -> Option<AstShape> {
-        None
+    fn ast_shape(&self,language: &mut Language) -> Option<AstShape> {
+        
+        let mut ctx = AstGenCtx::new();
+        Some(self.0.dsl.ast_shape(self.name(), &mut ctx,&mut language.ast_shapes))
+
     }
 }

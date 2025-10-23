@@ -1,9 +1,10 @@
 use crate::{
+    AstShape,
     derive::{attributes::SyntaxAttributeKind, properties::OperatorKind},
     language::rule_graph::{RecursionInfo, RuleGraph},
-    util::{Handle, Pool}, AstShape,
+    util::{Handle, Pool},
 };
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 use proc_macro2::TokenStream;
 use snafu::{ResultExt, Snafu};
@@ -52,7 +53,7 @@ pub(crate) struct Language {
     pub ident: Ident,
     pub operators: Vec<Operator>,
     pub root_idents: Vec<Ident>,
-    pub ast_shapes: HashMap<Ident, Option<AstShape>>, 
+    pub ast_shapes: HashMap<Ident, Option<AstShape>>,
     pub cycle_graph: RuleGraph,
     pub recursion_info: Option<RecursionInfo>,
     pub rules: Vec<Handle<Element>>,
@@ -204,6 +205,9 @@ impl Language {
         stream.extend(variants_code);
 
         stream.extend(self.pratt_codegen());
+
+        //stream.extend(self.ast_codegen());
+
         Ok(stream)
     }
 
@@ -229,6 +233,17 @@ impl Language {
                 postfix: [ #( #postfix_ops, )* ]
             );
         }
+    }
+
+    fn ast_codegen(&self) -> TokenStream {
+        self.ast_shapes
+            .iter()
+            .filter_map(|(ident, maybe_shape)| {
+                maybe_shape
+                    .as_ref()
+                    .map(|shape| shape.codegen(&self.ident, ident))
+            })
+            .collect()
     }
 }
 

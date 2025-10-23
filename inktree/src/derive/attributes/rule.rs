@@ -258,7 +258,7 @@ impl LanguageElement for Rule {
         Ok(())
     }
     
-    fn ast_shape(&self,language: &Language) -> Option<AstShape> {
+    fn ast_shape(&self,_language: &mut Language) -> Option<AstShape> {
         None
     }
 }

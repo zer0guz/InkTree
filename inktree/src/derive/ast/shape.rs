@@ -42,7 +42,9 @@ pub struct AstGenCtx {
 
 impl AstGenCtx {
     pub fn new() -> Self {
-        Self { counter: std::cell::Cell::new(0) }
+        Self {
+            counter: std::cell::Cell::new(0),
+        }
     }
 
     pub fn fresh_name(&self, parent: &Ident, kind: &str) -> Ident {
@@ -56,7 +58,7 @@ impl DslExpr {
         &self,
         rule_name: &Ident,
         ctx: &mut AstGenCtx,
-        ast_shapes: &mut HashMap<Ident, AstShape>,
+        ast_shapes: &mut HashMap<Ident, Option<AstShape>>,
     ) -> AstShape {
         match self {
             DslExpr::Just(ident) => AstShape::Node {
@@ -71,26 +73,56 @@ impl DslExpr {
                 let fields = exprs
                     .iter()
                     .map(|e| match e {
-                        DslExpr::Opt(inner) => {
-                            field_from_expr_with_card(inner, rule_name, ctx, ast_shapes, Cardinality::Optional)
-                        }
-                        DslExpr::Star(inner) | DslExpr::Plus(inner) => {
-                            field_from_expr_with_card(inner, rule_name, ctx, ast_shapes, Cardinality::Repeated)
-                        }
-                        _ => field_from_expr_with_card(e, rule_name, ctx, ast_shapes, Cardinality::One),
+                        DslExpr::Opt(inner) => field_from_expr_with_card(
+                            inner,
+                            rule_name,
+                            ctx,
+                            ast_shapes,
+                            Cardinality::Optional,
+                        ),
+                        DslExpr::Star(inner) | DslExpr::Plus(inner) => field_from_expr_with_card(
+                            inner,
+                            rule_name,
+                            ctx,
+                            ast_shapes,
+                            Cardinality::Repeated,
+                        ),
+                        _ => field_from_expr_with_card(
+                            e,
+                            rule_name,
+                            ctx,
+                            ast_shapes,
+                            Cardinality::One,
+                        ),
                     })
                     .collect();
                 AstShape::Node { fields }
             }
 
             DslExpr::Opt(inner) => {
-                let field = field_from_expr_with_card(inner, rule_name, ctx, ast_shapes, Cardinality::Optional);
-                AstShape::Node { fields: vec![field] }
+                let field = field_from_expr_with_card(
+                    inner,
+                    rule_name,
+                    ctx,
+                    ast_shapes,
+                    Cardinality::Optional,
+                );
+                AstShape::Node {
+                    fields: vec![field],
+                }
             }
 
             DslExpr::Star(inner) | DslExpr::Plus(inner) => {
-                let field = field_from_expr_with_card(inner, rule_name, ctx, ast_shapes, Cardinality::Repeated);
-                AstShape::Node { fields: vec![field] }
+                let field = field_from_expr_with_card(
+                    inner,
+                    rule_name,
+                    ctx,
+                    ast_shapes,
+                    Cardinality::Repeated,
+                );
+                AstShape::Node {
+                    fields: vec![field],
+                }
             }
 
             DslExpr::Call { name, .. } => AstShape::Node {
@@ -112,7 +144,7 @@ impl DslExpr {
                             // generate helper for nested alt/seq/etc
                             let anon = ctx.fresh_name(rule_name, "Alt");
                             let helper_shape = e.ast_shape(&anon, ctx, ast_shapes);
-                            ast_shapes.insert(anon.clone(), helper_shape);
+                            ast_shapes.insert(anon.clone(), Some(helper_shape));
                             variants.push(anon);
                         }
                     }
@@ -128,17 +160,29 @@ fn field_from_expr_with_card(
     expr: &DslExpr,
     parent: &Ident,
     ctx: &mut AstGenCtx,
-    ast_shapes: &mut HashMap<Ident, AstShape>,
+    ast_shapes: &mut HashMap<Ident, Option<AstShape>>,
     card: Cardinality,
 ) -> Field {
     match expr {
-        DslExpr::Just(ident) => Field { name: ident.clone(), kind: ident.clone(), cardinality: card },
-        DslExpr::Call { name, .. } => Field { name: name.clone(), kind: name.clone(), cardinality: card },
+        DslExpr::Just(ident) => Field {
+            name: ident.clone(),
+            kind: ident.clone(),
+            cardinality: card,
+        },
+        DslExpr::Call { name, .. } => Field {
+            name: name.clone(),
+            kind: name.clone(),
+            cardinality: card,
+        },
         _ => {
             let anon = ctx.fresh_name(parent, "Seq");
             let helper = expr.ast_shape(&anon, ctx, ast_shapes);
-            ast_shapes.insert(anon.clone(), helper);
-            Field { name: anon.clone(), kind: anon, cardinality: card }
+            ast_shapes.insert(anon.clone(), Some(helper));
+            Field {
+                name: anon.clone(),
+                kind: anon,
+                cardinality: card,
+            }
         }
     }
 }
@@ -166,32 +210,35 @@ impl AstShape {
             }
 
             AstShape::Node { fields } => {
-                let field_methods: Vec<_> = fields.iter().map(|field| {
-                    let field_type = format_ident!("{}Ast", field.kind);
-                    let field_name = syn::Ident::new(
-                        &field.name.to_string().to_lowercase(),
-                        field.name.span(),
-                    );
+                let field_methods: Vec<_> = fields
+                    .iter()
+                    .map(|field| {
+                        let field_type = format_ident!("{}Ast", field.kind);
+                        let field_name = syn::Ident::new(
+                            &field.name.to_string().to_lowercase(),
+                            field.name.span(),
+                        );
 
-                    match field.cardinality {
-                        Cardinality::One => quote! {
-                            pub fn #field_name(&self) -> #field_type {
-                                self.syntax().children().find_map(#field_type::cast)
-                                    .expect("missing required field")
-                            }
-                        },
-                        Cardinality::Optional => quote! {
-                            pub fn #field_name(&self) -> Option<#field_type> {
-                                self.syntax().children().find_map(#field_type::cast)
-                            }
-                        },
-                        Cardinality::Repeated => quote! {
-                            pub fn #field_name(&self) -> impl Iterator<Item=#field_type> + '_ {
-                                self.syntax().children().filter_map(#field_type::cast)
-                            }
-                        },
-                    }
-                }).collect();
+                        match field.cardinality {
+                            Cardinality::One => quote! {
+                                pub fn #field_name(&self) -> #field_type {
+                                    self.syntax().children().find_map(#field_type::cast)
+                                        .expect("missing required field")
+                                }
+                            },
+                            Cardinality::Optional => quote! {
+                                pub fn #field_name(&self) -> Option<#field_type> {
+                                    self.syntax().children().find_map(#field_type::cast)
+                                }
+                            },
+                            Cardinality::Repeated => quote! {
+                                pub fn #field_name(&self) -> impl Iterator<Item=#field_type> + '_ {
+                                    self.syntax().children().filter_map(#field_type::cast)
+                                }
+                            },
+                        }
+                    })
+                    .collect();
 
                 quote! {
                     #[derive(Clone)]
@@ -212,27 +259,39 @@ impl AstShape {
             }
 
             AstShape::Enum { variants } => {
-                let variant_defs: Vec<_> = variants.iter().map(|variant| {
-                    let variant_ast = format_ident!("{}Ast", variant);
-                    quote! { #variant(#variant_ast) }
-                }).collect();
+                let variant_defs: Vec<_> = variants
+                    .iter()
+                    .map(|variant| {
+                        let variant_ast = format_ident!("{}Ast", variant);
+                        quote! { #variant(#variant_ast) }
+                    })
+                    .collect();
 
-                let kind_consts: Vec<_> = variants.iter().map(|v| {
-                    quote! { #lang_ident::#v }
-                }).collect();
+                let kind_consts: Vec<_> = variants
+                    .iter()
+                    .map(|v| {
+                        quote! { #lang_ident::#v }
+                    })
+                    .collect();
 
-                let cast_arms: Vec<_> = variants.iter().map(|variant| {
-                    let variant_ast = format_ident!("{}Ast", variant);
-                    quote! {
-                        if let Some(x) = #variant_ast::cast(syntax.clone()) {
-                            return Some(#ast_name::#variant(x));
+                let cast_arms: Vec<_> = variants
+                    .iter()
+                    .map(|variant| {
+                        let variant_ast = format_ident!("{}Ast", variant);
+                        quote! {
+                            if let Some(x) = #variant_ast::cast(syntax.clone()) {
+                                return Some(#ast_name::#variant(x));
+                            }
                         }
-                    }
-                }).collect();
+                    })
+                    .collect();
 
-                let syntax_arms: Vec<_> = variants.iter().map(|v| {
-                    quote! { #ast_name::#v(inner) => inner.syntax() }
-                }).collect();
+                let syntax_arms: Vec<_> = variants
+                    .iter()
+                    .map(|v| {
+                        quote! { #ast_name::#v(inner) => inner.syntax() }
+                    })
+                    .collect();
 
                 quote! {
                     #[derive(Clone)]
@@ -258,7 +317,11 @@ impl AstShape {
                 }
             }
 
-            AstShape::Pratt { atom, prefix_ops, infix_ops } => {
+            AstShape::Pratt {
+                atom,
+                prefix_ops,
+                infix_ops,
+            } => {
                 let prefix_enum = format_ident!("{}PrefixOp", name);
                 let infix_enum = format_ident!("{}InfixOp", name);
                 let prefix_expr = format_ident!("{}PrefixExpr", name);
@@ -404,7 +467,7 @@ mod tests {
         let (helper_name, helper_shape) = ast_shapes.iter().next().unwrap();
         assert!(helper_name.to_string().starts_with("Choice_Alt_"));
         match helper_shape {
-            AstShape::Node { fields } => {
+            Some(AstShape::Node { fields }) => {
                 assert_eq!(fields.len(), 2);
                 assert_eq!(fields[0].kind, ident("A"));
                 assert_eq!(fields[1].kind, ident("B"));
