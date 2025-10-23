@@ -110,7 +110,7 @@ impl Element {
     pub fn build(&mut self, language: &mut Language) -> Result<(), Errors<ElementError>> {
         let name = self.attribute.name().clone();
 
-        if language.ast_shapes.contains_key(&name) {
+        if language.idents.contains(&name) {
             return Err(syn::Error::new_spanned(&name, "redefined language element todo"))
                 .context(UnsupportedSnafu)
                 .map_err(Errors::from)?;
@@ -137,8 +137,7 @@ impl Element {
 
         self.attribute.build(&self.properties, language)?;
 
-        let shape = self.attribute.ast_shape(language);
-        language.ast_shapes.insert(name.clone(), shape);
+        language.idents.insert(name.clone());
 
         return Ok(());
     }

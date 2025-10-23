@@ -82,7 +82,9 @@ impl LanguageElement for Node {
     fn ast_shape(&self,language: &mut Language) -> Option<AstShape> {
         
         let mut ctx = AstGenCtx::new();
-        Some(self.0.dsl.ast_shape(self.name(), &mut ctx,&mut language.ast_shapes))
+        //Some(self.0.dsl.ast_shape(self.name(), &mut ctx,&mut language.idents))
+
+        todo!()
 
     }
 }

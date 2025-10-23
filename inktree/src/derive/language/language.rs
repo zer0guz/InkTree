@@ -4,7 +4,7 @@ use crate::{
     language::rule_graph::{RecursionInfo, RuleGraph},
     util::{Handle, Pool},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use proc_macro2::TokenStream;
 use snafu::{ResultExt, Snafu};
@@ -53,11 +53,12 @@ pub(crate) struct Language {
     pub ident: Ident,
     pub operators: Vec<Operator>,
     pub root_idents: Vec<Ident>,
-    pub ast_shapes: HashMap<Ident, Option<AstShape>>,
+    pub idents: HashSet<Ident>,
     pub cycle_graph: RuleGraph,
     pub recursion_info: Option<RecursionInfo>,
-    pub rules: Vec<Handle<Element>>,
+    pub rules: HashMap<Ident,Handle<Element>>,
     pub extras: Vec<Ident>,
+
 }
 
 impl Language {
@@ -236,14 +237,19 @@ impl Language {
     }
 
     fn ast_codegen(&self) -> TokenStream {
-        self.ast_shapes
-            .iter()
-            .filter_map(|(ident, maybe_shape)| {
-                maybe_shape
-                    .as_ref()
-                    .map(|shape| shape.codegen(&self.ident, ident))
-            })
-            .collect()
+        let root  = self.root_idents.first().expect("root has already been verified");
+
+
+        // self.idents
+        //     .iter()
+        //     .filter_map(|(ident, maybe_shape)| {
+        //         maybe_shape
+        //             .as_ref()
+        //             .map(|shape| shape.codegen(&self.ident, ident))
+        //     })
+        //     .collect()
+
+        todo!()
     }
 }
 
@@ -251,12 +257,12 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
     let mut language = Language {
         elements: Pool::with_capacity(input.attrs.len() as u32),
         ident: input.ident.clone(),
-        ast_shapes: HashMap::new(),
+        idents: HashSet::new(),
         operators: vec![],
         root_idents: vec![],
         cycle_graph: RuleGraph::new(),
         recursion_info: None,
-        rules: vec![],
+        rules: HashMap::new(),
         extras: vec![],
     };
 
@@ -305,7 +311,7 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
     let rules = language
         .rules
         .iter()
-        .map(|handle| {
+        .map(|(_,handle)| {
             let element = &language.elements[*handle];
             let rule = element.rule().expect("comes from rules");
             (rule.name.clone(), rule)

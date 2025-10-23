@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{Ident, MetaList};
 
 use crate::{
@@ -67,8 +67,10 @@ impl LanguageElement for Pratt {
     }
 
     fn ast_shape(&self, language: &mut Language) -> Option<AstShape> {
+        let atom_name = format_ident!("{}Ast",self.name());
+
         Some(AstShape::Pratt {
-            atom: self.name().clone(),
+            atom: atom_name,
             prefix_ops: language
                 .operators
                 .iter()

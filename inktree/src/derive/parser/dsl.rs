@@ -7,7 +7,7 @@ use syn::Ident;
 
 use crate::{AstShape, chumsky::prelude::*, derive::attributes::Rule};
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash,Clone)]
 pub enum DslExpr {
     Just(Ident),
     Seq(Vec<DslExpr>),
@@ -51,19 +51,13 @@ impl<'a> CallShape<'a> {
     }
 }
 pub struct ParserCtx<'a> {
-    pub ast_shapes: &'a HashMap<Ident, Option<AstShape>>,
     pub parameters: &'a HashSet<Ident>,
     pub anchored: HashSet<Ident>,
 }
 
 impl<'a> ParserCtx<'a> {
-    pub fn new(
-        ast_shapes: &'a HashMap<Ident, Option<AstShape>>,
-        parameters: &'a HashSet<Ident>,
-        anchored: HashSet<Ident>,
-    ) -> Self {
+    pub fn new(parameters: &'a HashSet<Ident>, anchored: HashSet<Ident>) -> Self {
         Self {
-            ast_shapes,
             parameters,
             anchored,
         }
@@ -124,21 +118,14 @@ impl DslExpr {
         }
 
         // ---- not in same SCC ----
-        if let Some(maybe_shape) = ctx.ast_shapes.get(name) {
-            match maybe_shape {
-                Some(AstShape::Token) => {
-                    // call token parser
-                    quote! { #name::parser() }
-                }
-                _ => {
-                    // call node parser with args
-                    quote! { #name::parser(#(#arg_tokens),*) }
-                }
-            }
-        } else if ctx.parameters.contains(name) {
+        if ctx.parameters.contains(name) {
             quote! { #name.clone() }
         } else {
-            panic!("unknown rule {name:?}");
+            if ctx.parameters.len() > 0 {
+                quote! { #name::parser() }
+            } else {
+                quote! { #name::parser(#(#arg_tokens),*) }
+            }
         }
     }
 

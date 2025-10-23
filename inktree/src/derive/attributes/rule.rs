@@ -13,12 +13,13 @@ use syn::{
 };
 
 use crate::{
+    AstShape,
     derive::{
         attributes::allowed::ALLOWED_RULE,
         parser::{DslExpr, FromMeta, ParserCtx},
         properties::{Property, PropertyKind},
     },
-    language::{ElementError, Language, LanguageElement}, AstShape,
+    language::{ElementError, Language, LanguageElement},
 };
 
 #[derive(Debug, From)]
@@ -53,7 +54,7 @@ impl Rule {
             HashSet::new()
         };
 
-        let ctx = ParserCtx::new(&language.ast_shapes, &self.parameters, anchored);
+        let ctx = ParserCtx::new(&self.parameters, anchored);
 
         self.dsl.parser(&ctx)
     }
@@ -245,7 +246,7 @@ impl LanguageElement for Rule {
         // Insert into dependency graph
 
         let self_handle = language.elements.next_handle();
-        language.rules.push(self_handle);
+        language.rules.insert(self.name.clone(), self_handle);
 
         let mut deps = std::collections::HashSet::new();
         self.dsl.collect_deps(&self.parameters, &mut deps);
@@ -257,8 +258,8 @@ impl LanguageElement for Rule {
 
         Ok(())
     }
-    
-    fn ast_shape(&self,_language: &mut Language) -> Option<AstShape> {
+
+    fn ast_shape(&self, _language: &mut Language) -> Option<AstShape> {
         None
     }
 }
