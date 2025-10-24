@@ -52,19 +52,19 @@ pub(crate) struct Language {
     pub elements: Pool<Element>,
     pub ident: Ident,
     pub operators: Vec<Operator>,
-    pub root_idents: Vec<Ident>,
-    pub idents: HashSet<Ident>,
+    pub root: Option<Handle<Element>>,
     pub cycle_graph: RuleGraph,
     pub recursion_info: Option<RecursionInfo>,
-    pub rules: HashMap<Ident,Handle<Element>>,
+    pub idents: HashMap<Ident, Handle<Element>>,
     pub extras: Vec<Ident>,
-
 }
 
 impl Language {
     fn handle_element(&mut self, mut element: Element) -> Result<(), Errors<Error>> {
+        let name = element.attribute.name().clone();
         element.build(self).map_err(Errors::map_errors)?;
-        self.elements.push(element);
+        let handle = self.elements.push(element);
+        self.idents.insert(name, handle);
 
         return Ok(());
     }
@@ -96,7 +96,9 @@ impl Language {
             .collect();
         let ident = &self.ident;
         let variant_count = self.elements.len() as u32;
-        let root_ident = self.root_idents.iter().next().expect("already checked");
+        let root_ident = self.elements[self.root.expect("root existence already validated")]
+            .attribute
+            .name();
         quote! {
             impl ::inktree::cstree::Syntax for #ident {
                 fn from_raw(raw: inktree::cstree::RawSyntaxKind) -> Self {
@@ -174,15 +176,9 @@ impl Language {
             todo!("REEEE FIX YOUR LEFT RECURSION")
         }
 
-        match self.root_idents.len() {
-            0 => Err(syn::Error::new_spanned(&self.ident, "no root todo text")),
-            1 => Ok(()),
-            _ => Err(syn::Error::new_spanned(
-                &self.root_idents[1],
-                "multiple roots todo text",
-            )),
+        if self.root.is_none() {
+            Err(syn::Error::new_spanned(&self.ident, "no root todo text")).map_err(Error::from)?;
         }
-        .map_err(Error::from)?;
 
         let mut stream = quote! {
             use inktree::Parseable;
@@ -236,18 +232,66 @@ impl Language {
         }
     }
 
-    fn ast_codegen(&self) -> TokenStream {
-        let root  = self.root_idents.first().expect("root has already been verified");
+    fn ast_codegen(&mut self) -> TokenStream {
+        let root = &self.elements[self.root.expect("root verified")];
+        let mut shapes: HashMap<Ident, AstShape> = HashMap::new();
 
+        // optional: keep the discovery order (helps make output deterministic)
+        let mut discovery: Vec<&Element> = Vec::new();
 
-        // self.idents
-        //     .iter()
-        //     .filter_map(|(ident, maybe_shape)| {
-        //         maybe_shape
-        //             .as_ref()
-        //             .map(|shape| shape.codegen(&self.ident, ident))
-        //     })
-        //     .collect()
+        // ---- worklist seeded with the root
+        let mut stack = vec![root.attribute.name()];
+
+        // while let Some(name) = stack.pop() {
+        //     // already discovered? then skip
+        //     if shapes.contains_key(&name) {
+        //         continue;
+        //     }
+
+        //     // build this shape and insert it *immediately* to mark as discovered
+        //     let shape = self.elements[name]
+        //         .attribute
+        //         .ast_shape(&mut shapes, self)
+        //         .expect("shape build");
+        //     shapes.insert(name, shape);
+        //     discovery.push(name);
+
+        //     // discover deps from the just-built shape and push the unknown ones
+        //     let deps = match shapes.get(&name).unwrap() {
+        //         AstShape::Token => Vec::new(),
+        //         AstShape::Enum { variants } => variants.clone(),
+        //         AstShape::Node { fields } => fields.clone(),
+        //         AstShape::Pratt { atom, prefix_ops, infix_ops } => {
+        //             let mut v = Vec::with_capacity(1 + prefix_ops.len() + infix_ops.len());
+        //             v.push(*atom);
+        //             v.extend(prefix_ops.iter().copied());
+        //             v.extend(infix_ops.iter().copied());
+        //             v
+        //         }
+        //     };
+
+        //     for dep in deps {
+        //         if !shapes.contains_key(&dep) {
+        //             stack.push(dep);
+        //         }
+        //     }
+        // }
+
+        // // ---- codegen (order doesn't need to be topo if you rely on Rust name resolution)
+        // // using discovery order for stability; switch to `for (id, shape) in shapes.iter()` if you prefer.
+        // let mut pieces = Vec::new();
+        // for id in discovery {
+        //     let shape = &shapes[ &id ];
+        //     let ts = match shape {
+        //         AstShape::Token => quote! { /* token for #id */ },
+        //         AstShape::Enum { .. } => quote! { /* enum for #id */ },
+        //         AstShape::Node { .. } => quote! { /* node for #id */ },
+        //         AstShape::Pratt { .. } => quote! { /* pratt for #id */ },
+        //     };
+        //     pieces.push(ts);
+        // }
+
+        // quote! { #(#pieces)* }
 
         todo!()
     }
@@ -257,12 +301,11 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
     let mut language = Language {
         elements: Pool::with_capacity(input.attrs.len() as u32),
         ident: input.ident.clone(),
-        idents: HashSet::new(),
         operators: vec![],
-        root_idents: vec![],
+        root: None,
         cycle_graph: RuleGraph::new(),
         recursion_info: None,
-        rules: HashMap::new(),
+        idents: HashMap::new(),
         extras: vec![],
     };
 
@@ -309,12 +352,11 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
         .collect_either_flatten()?;
 
     let rules = language
-        .rules
+        .idents
         .iter()
-        .map(|(_,handle)| {
+        .map(|(_, handle)| {
             let element = &language.elements[*handle];
-            let rule = element.rule().expect("comes from rules");
-            (rule.name.clone(), rule)
+            (element.attribute.name().clone(), element)
         })
         .collect();
 

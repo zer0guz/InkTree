@@ -1,4 +1,6 @@
-use crate::{derive::attributes::*, AstShape};
+use std::collections::HashMap;
+
+use crate::{AstShape, derive::attributes::*, language::Error};
 use enum_dispatch::enum_dispatch;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
@@ -110,10 +112,13 @@ impl Element {
     pub fn build(&mut self, language: &mut Language) -> Result<(), Errors<ElementError>> {
         let name = self.attribute.name().clone();
 
-        if language.idents.contains(&name) {
-            return Err(syn::Error::new_spanned(&name, "redefined language element todo"))
-                .context(UnsupportedSnafu)
-                .map_err(Errors::from)?;
+        if language.idents.contains_key(&name) {
+            return Err(syn::Error::new_spanned(
+                &name,
+                "redefined language element todo",
+            ))
+            .context(UnsupportedSnafu)
+            .map_err(Errors::from)?;
         }
 
         self.properties
@@ -131,13 +136,19 @@ impl Element {
             })
             .collect_either()?;
 
-        if self.properties.contains(&Property::Root(Root)) {
-            language.root_idents.push(self.attribute.name().clone());
-        };
-
         self.attribute.build(&self.properties, language)?;
 
-        language.idents.insert(name.clone());
+        if self.properties.contains(&Property::Root(Root)) {
+            if language.root.is_none() {
+                language.root = Some(language.elements.last_handle());
+            } else {
+                Err(syn::Error::new_spanned(
+                    &self.attribute.name(),
+                    "no root todo text",
+                ))
+                .map_err(ElementError::from)?;
+            }
+        };
 
         return Ok(());
     }
@@ -172,5 +183,5 @@ pub trait LanguageElement: Sized {
 
     fn allowed(&self) -> &'static [PropertyKind];
 
-    fn ast_shape(&self, language: &mut Language) -> Option<AstShape>;
+    fn ast_shape(&self, shapes: &mut HashMap<Ident,&Element>,language: &Language) -> Option<AstShape>;
 }

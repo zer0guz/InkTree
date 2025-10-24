@@ -1,16 +1,16 @@
+use std::collections::HashMap;
+
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
 use regex_syntax::hir::Class;
 use syn::{Ident, Lit};
 
 use crate::{
-    AstShape,
     derive::{
         attributes::allowed::ALLOWED_TOKEN,
         parser::{FromMeta, Mir},
-        properties::{Property, PropertyKind, try_handle_extra},
-    },
-    language::{ElementError, Language, LanguageElement},
+        properties::{try_handle_extra, Property, PropertyKind},
+    }, language::{Element, ElementError, Language, LanguageElement}, AstShape
 };
 
 #[derive(Debug)]
@@ -177,7 +177,7 @@ impl LanguageElement for Token {
         Ok(())
     }
 
-    fn ast_shape(&self, _language: &mut Language) -> Option<AstShape> {
+   fn ast_shape(&self, shapes: &mut HashMap<Ident,&Element>,language: &Language) -> Option<AstShape> {
         if self.ignored {
             return None;
         }

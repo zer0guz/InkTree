@@ -111,6 +111,10 @@ impl<T> Pool<T> {
     pub fn next_handle(&self) -> Handle<T> {
         Handle::new(self.len())
     }
+    
+    pub fn last_handle(&self) -> Handle<T> {
+        Handle::new(self.len()-1)
+    }
 }
 
 #[derive(Derivative)]

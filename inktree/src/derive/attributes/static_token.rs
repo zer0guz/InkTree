@@ -1,15 +1,15 @@
+use std::collections::HashMap;
+
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Ident, Lit, LitStr, MetaList};
 
 use crate::{
-    AstShape,
     derive::{
         attributes::allowed::ALLOWED_STATIC_TOKEN,
         parser::FromMeta,
-        properties::{Operator, Property, PropertyKind, try_handle_extra},
-    },
-    language::{ElementError, Language, LanguageElement},
+        properties::{try_handle_extra, Operator, Property, PropertyKind},
+    }, language::{Element, ElementError, Language, LanguageElement}, AstShape
 };
 
 pub struct StaticToken {
@@ -113,7 +113,7 @@ impl LanguageElement for StaticToken {
         Ok(())
     }
 
-    fn ast_shape(&self, _language: &mut Language) -> Option<AstShape> {
+    fn ast_shape(&self, _shapes: &mut HashMap<Ident,&Element>,_language: &Language) -> Option<AstShape>{
         if self.ignored {
             return None;
         }

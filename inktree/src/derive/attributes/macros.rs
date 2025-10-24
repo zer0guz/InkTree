@@ -99,7 +99,7 @@ macro_rules! token {
 macro_rules! static_token {
     // no sink
     ($lang_name:ident :: $name:ident, $text:literal) => {
-        struct $name;
+        pub struct $name;
         $crate::parseable!($lang_name::$name, [], {
             use $crate::chumsky::prelude::*;
             use $crate::chumsky_ext::*;
@@ -109,7 +109,7 @@ macro_rules! static_token {
 
     // with sink (extras)
     ($lang_name:ident :: $name:ident, $text:literal, has_extras) => {
-        struct $name;
+        pub struct $name;
         $crate::parseable!($lang_name::$name, [], {
             use $crate::chumsky::prelude::*;
             use $crate::chumsky_ext::*;

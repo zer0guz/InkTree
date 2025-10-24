@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chumsky::Parser;
 use derive_more::From;
@@ -13,13 +13,11 @@ use syn::{
 };
 
 use crate::{
-    AstShape,
     derive::{
         attributes::allowed::ALLOWED_RULE,
         parser::{DslExpr, FromMeta, ParserCtx},
         properties::{Property, PropertyKind},
-    },
-    language::{ElementError, Language, LanguageElement},
+    }, language::{Element, ElementError, Language, LanguageElement}, AstShape
 };
 
 #[derive(Debug, From)]
@@ -245,9 +243,6 @@ impl LanguageElement for Rule {
     ) -> Result<(), ElementError> {
         // Insert into dependency graph
 
-        let self_handle = language.elements.next_handle();
-        language.rules.insert(self.name.clone(), self_handle);
-
         let mut deps = std::collections::HashSet::new();
         self.dsl.collect_deps(&self.parameters, &mut deps);
         for param in &self.parameters {
@@ -259,7 +254,7 @@ impl LanguageElement for Rule {
         Ok(())
     }
 
-    fn ast_shape(&self, _language: &mut Language) -> Option<AstShape> {
+    fn ast_shape(&self, shapes: &mut HashMap<Ident,&Element>,language: &Language) -> Option<AstShape>{
         None
     }
 }

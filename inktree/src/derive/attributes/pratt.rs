@@ -1,15 +1,15 @@
+use std::collections::HashMap;
+
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{Ident, MetaList};
 
 use crate::{
-    AstShape,
     derive::{
-        attributes::{Node, allowed::ALLOWED_PRATT},
+        attributes::{allowed::ALLOWED_PRATT, Node},
         parser::FromMeta,
         properties::{Property, PropertyKind},
-    },
-    language::{ElementError, Language, LanguageElement},
+    }, language::{Element, ElementError, Language, LanguageElement}, AstShape
 };
 
 #[derive(Debug)]
@@ -66,7 +66,7 @@ impl LanguageElement for Pratt {
         self.node.build(properties, language)
     }
 
-    fn ast_shape(&self, language: &mut Language) -> Option<AstShape> {
+    fn ast_shape(&self, shapes: &mut HashMap<Ident,&Element>,language: &Language) -> Option<AstShape> {
         let atom_name = format_ident!("{}Ast",self.name());
 
         Some(AstShape::Pratt {

@@ -1,18 +1,19 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chumsky::Parser;
 use derive_more::From;
 use proc_macro2::TokenStream;
-use quote::{quote};
+use quote::quote;
 use syn::{Ident, MetaList};
 
 use crate::{
+    AstGenCtx, AstShape,
     derive::{
         attributes::{allowed::ALLOWED_NODE, rule::Rule},
-        parser::{dsl_lexer, dsl_parser, FromMeta},
+        parser::{FromMeta, dsl_lexer, dsl_parser},
         properties::{Property, PropertyKind},
     },
-    language::{ElementError, Language, LanguageElement}, AstGenCtx, AstShape,
+    language::{Element, ElementError, Language, LanguageElement},
 };
 
 #[derive(Debug, From)]
@@ -78,13 +79,15 @@ impl LanguageElement for Node {
     ) -> Result<(), ElementError> {
         self.0.build(properties, language)
     }
-    
-    fn ast_shape(&self,language: &mut Language) -> Option<AstShape> {
-        
+
+    fn ast_shape(
+        &self,
+        shapes: &mut HashMap<Ident, &Element>,
+        language: &Language,
+    ) -> Option<AstShape> {
         let mut ctx = AstGenCtx::new();
         //Some(self.0.dsl.ast_shape(self.name(), &mut ctx,&mut language.idents))
 
         todo!()
-
     }
 }

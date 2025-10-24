@@ -5,9 +5,9 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{AstShape, chumsky::prelude::*, derive::attributes::Rule};
+use crate::{AstShape, chumsky::prelude::*, derive::attributes::Rule, language::Element};
 
-#[derive(Debug, PartialEq, Eq, Hash,Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum DslExpr {
     Just(Ident),
     Seq(Vec<DslExpr>),
@@ -180,7 +180,7 @@ impl DslExpr {
         &'a self,
         origin: &Ident,
         nullable: &HashMap<Ident, bool>,
-        rules: &HashMap<Ident, &'a Rule>,
+        elements: &HashMap<Ident, &'a Element>,
         subst: &HashMap<Ident, &'a DslExpr>,
         out: &mut HashSet<Ident>,
         visiting: &mut HashSet<CallShape<'a>>,
@@ -189,7 +189,8 @@ impl DslExpr {
             DslExpr::Just(name) => {
                 if let Some(arg_expr) = subst.get(name) {
                     // Instead of treating as a leaf, recurse into the argument
-                    arg_expr.first_nonterminals_with(origin, nullable, rules, subst, out, visiting);
+                    arg_expr
+                        .first_nonterminals_with(origin, nullable, elements, subst, out, visiting);
                 } else {
                     out.insert(name.clone());
                 }
@@ -208,7 +209,9 @@ impl DslExpr {
                     return;
                 }
 
-                if let Some(rule) = rules.get(name) {
+                if let Some(element) = elements.get(name)
+                    && let Some(rule) = element.rule()
+                {
                     // Build a fresh substitution for this call
                     let mut inner_subst = HashMap::new();
                     for (param, arg_expr) in rule.parameters.iter().zip(args) {
@@ -220,7 +223,7 @@ impl DslExpr {
                     rule.dsl.first_nonterminals_with(
                         origin,
                         nullable,
-                        rules,
+                        elements,
                         &inner_subst,
                         out,
                         visiting,
@@ -230,7 +233,7 @@ impl DslExpr {
 
             DslExpr::Seq(items) => {
                 for e in items {
-                    e.first_nonterminals_with(origin, nullable, rules, subst, out, visiting);
+                    e.first_nonterminals_with(origin, nullable, elements, subst, out, visiting);
                     if !e.nullable_with(nullable) {
                         break;
                     }
@@ -239,12 +242,12 @@ impl DslExpr {
 
             DslExpr::Alt(exprs) => {
                 for expr in exprs {
-                    expr.first_nonterminals_with(origin, nullable, rules, subst, out, visiting);
+                    expr.first_nonterminals_with(origin, nullable, elements, subst, out, visiting);
                 }
             }
 
             DslExpr::Opt(inner) | DslExpr::Star(inner) | DslExpr::Plus(inner) => {
-                inner.first_nonterminals_with(origin, nullable, rules, subst, out, visiting);
+                inner.first_nonterminals_with(origin, nullable, elements, subst, out, visiting);
             }
         }
     }
