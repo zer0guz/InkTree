@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{AstShape, derive::attributes::*, language::Error};
+use crate::{AstShape, AstShapeKind, derive::attributes::*, language::Error};
 use enum_dispatch::enum_dispatch;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
@@ -140,11 +140,11 @@ impl Element {
 
         if self.properties.contains(&Property::Root(Root)) {
             if language.root.is_none() {
-                language.root = Some(language.elements.last_handle());
+                language.root = Some(language.element_pool.next_handle());
             } else {
                 Err(syn::Error::new_spanned(
                     &self.attribute.name(),
-                    "no root todo text",
+                    "multiple roots todo text",
                 ))
                 .map_err(ElementError::from)?;
             }
@@ -183,5 +183,9 @@ pub trait LanguageElement: Sized {
 
     fn allowed(&self) -> &'static [PropertyKind];
 
-    fn ast_shape(&self, shapes: &mut HashMap<Ident,&Element>,language: &Language) -> Option<AstShape>;
+    fn ast_shape(
+        &self,
+        ast_shapes: &mut HashMap<Ident, AstShape>,
+        language: &Language,
+    ) -> Option<AstShape>;
 }

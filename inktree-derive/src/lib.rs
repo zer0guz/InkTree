@@ -1,10 +1,10 @@
-use proc_macro2::TokenStream;
-use quote::quote;
-use syn::{DeriveInput, parse_macro_input};
 use inktree::{
     Errors,
     language::{Error, build},
 };
+use proc_macro2::TokenStream;
+use quote::quote;
+use syn::{DeriveInput, parse_macro_input};
 
 #[proc_macro_derive(SyntaxGenerator, attributes(inktree))]
 pub fn syntax_generator(input: proc_macro::TokenStream) -> proc_macro::TokenStream {

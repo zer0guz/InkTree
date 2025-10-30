@@ -1,13 +1,11 @@
-use syn::{Ident};
+use syn::Ident;
 
 use crate::{derive::parser::FromMeta, language::ElementError};
 
-
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Ast {
-    Ignored
+    Ignored,
 }
-
 
 impl FromMeta for Ast {
     fn from_list(list: &syn::MetaList, _: Option<&Ident>) -> Result<Self, ElementError> {

@@ -7,13 +7,11 @@ use quote::quote;
 use syn::{Ident, MetaList};
 
 use crate::{
-    AstGenCtx, AstShape,
     derive::{
         attributes::{allowed::ALLOWED_NODE, rule::Rule},
-        parser::{FromMeta, dsl_lexer, dsl_parser},
+        parser::{dsl_lexer, dsl_parser, FromMeta},
         properties::{Property, PropertyKind},
-    },
-    language::{Element, ElementError, Language, LanguageElement},
+    }, language::{Element, ElementError, Language, LanguageElement}, AstGenCtx, AstShape, AstShapeKind
 };
 
 #[derive(Debug, From)]
@@ -82,12 +80,10 @@ impl LanguageElement for Node {
 
     fn ast_shape(
         &self,
-        shapes: &mut HashMap<Ident, &Element>,
+        ast_shapes: &mut HashMap<Ident, AstShape>,
         language: &Language,
     ) -> Option<AstShape> {
         let mut ctx = AstGenCtx::new();
-        //Some(self.0.dsl.ast_shape(self.name(), &mut ctx,&mut language.idents))
-
-        todo!()
+        Some(self.0.dsl.ast_shape(self.name(), &mut ctx, ast_shapes))
     }
 }

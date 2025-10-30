@@ -10,7 +10,7 @@ use crate::{
         attributes::allowed::ALLOWED_TOKEN,
         parser::{FromMeta, Mir},
         properties::{try_handle_extra, Property, PropertyKind},
-    }, language::{Element, ElementError, Language, LanguageElement}, AstShape
+    }, language::{Element, ElementError, Language, LanguageElement}, AstShape, AstShapeKind
 };
 
 #[derive(Debug)]
@@ -177,10 +177,14 @@ impl LanguageElement for Token {
         Ok(())
     }
 
-   fn ast_shape(&self, shapes: &mut HashMap<Ident,&Element>,language: &Language) -> Option<AstShape> {
+    fn ast_shape(
+        &self,
+        ast_shapes: &mut HashMap<Ident, AstShape>,
+        language: &Language,
+    ) -> Option<AstShape> {
         if self.ignored {
             return None;
         }
-        Some(AstShape::Token)
+        Some(AstShape::new(AstShapeKind::Token,self.name.clone()))
     }
 }

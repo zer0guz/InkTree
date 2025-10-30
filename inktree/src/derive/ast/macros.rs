@@ -8,7 +8,7 @@ macro_rules! ast_token {
 
         impl $crate::derive::AstToken for $ast_name {
             type Syntax = $lang_name;
-            const KINDS: &[Self::Syntax]= &[$lang_name::$name];
+            const KINDS: &[Self::Syntax] = &[$lang_name::$name];
 
             fn syntax(&self) -> &$crate::cstree::syntax::SyntaxToken<$lang_name> {
                 &self.syntax
@@ -41,7 +41,7 @@ macro_rules! ast_node {
 
         impl $crate::derive::AstNode for $ast_name {
             type Syntax = $lang_name;
-            const KINDS: &[Self::Syntax]= &[$lang_name::$name];
+            const KINDS: &[Self::Syntax] = &[$lang_name::$name];
 
             fn syntax(&self) -> &$crate::cstree::syntax::SyntaxNode<$lang_name> {
                 &self.syntax

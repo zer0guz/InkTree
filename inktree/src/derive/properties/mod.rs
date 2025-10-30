@@ -21,7 +21,9 @@ use crate::{
     derive::{
         parser::FromMeta,
         properties::{
-            ast::Ast, extra::Extra, operator::{Infix, Postfix, Prefix}
+            ast::Ast,
+            extra::Extra,
+            operator::{Infix, Postfix, Prefix},
         },
     },
     language::ElementError,
@@ -64,13 +66,13 @@ impl Property {
     pub fn try_as_extra(&self) -> Option<Extra> {
         match self {
             Property::Extra(extra) => Some(*extra),
-            _ => None
+            _ => None,
         }
     }
     pub fn is_ignored(&self) -> bool {
         match self {
             Property::Ast(Ast::Ignored) => true,
-            _ => false
+            _ => false,
         }
     }
 }

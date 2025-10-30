@@ -1,11 +1,15 @@
 use crate::{
-    AstShape,
+    AstShape, AstShapeKind,
     derive::{attributes::SyntaxAttributeKind, properties::OperatorKind},
-    language::rule_graph::{RecursionInfo, RuleGraph},
+    language::{
+        element,
+        rule_graph::{RecursionInfo, RuleGraph},
+    },
     util::{Handle, Pool},
 };
 use std::collections::{HashMap, HashSet};
 
+use itertools::Itertools;
 use proc_macro2::TokenStream;
 use snafu::{ResultExt, Snafu};
 use strum::IntoDiscriminant;
@@ -49,21 +53,21 @@ pub enum Error {
 }
 
 pub(crate) struct Language {
-    pub elements: Pool<Element>,
+    pub element_pool: Pool<Element>,
     pub ident: Ident,
     pub operators: Vec<Operator>,
     pub root: Option<Handle<Element>>,
     pub cycle_graph: RuleGraph,
     pub recursion_info: Option<RecursionInfo>,
-    pub idents: HashMap<Ident, Handle<Element>>,
     pub extras: Vec<Ident>,
+    pub idents: HashMap<Ident, Handle<Element>>,
 }
 
 impl Language {
     fn handle_element(&mut self, mut element: Element) -> Result<(), Errors<Error>> {
         let name = element.attribute.name().clone();
         element.build(self).map_err(Errors::map_errors)?;
-        let handle = self.elements.push(element);
+        let handle = self.element_pool.push(element);
         self.idents.insert(name, handle);
 
         return Ok(());
@@ -71,7 +75,7 @@ impl Language {
 
     fn syntax_impl(&self) -> TokenStream {
         let (static_texts, parsers): (Vec<_>, Vec<_>) = self
-            .elements
+            .element_pool
             .iter()
             .filter(|element| element.attribute.discriminant() != SyntaxAttributeKind::Rule)
             .map(|variant| {
@@ -95,8 +99,8 @@ impl Language {
             })
             .collect();
         let ident = &self.ident;
-        let variant_count = self.elements.len() as u32;
-        let root_ident = self.elements[self.root.expect("root existence already validated")]
+        let variant_count = self.element_pool.len() as u32;
+        let root_ident = self.element_pool[self.root.expect("root existence already validated")]
             .attribute
             .name();
         quote! {
@@ -164,7 +168,7 @@ impl Language {
         }
     }
 
-    fn codegen(&self) -> Result<TokenStream, Errors<Error>> {
+    fn codegen(&mut self) -> Result<TokenStream, Errors<Error>> {
         if self
             .recursion_info
             .as_ref()
@@ -194,7 +198,7 @@ impl Language {
         stream.extend(self.syntax_impl());
 
         let variants_code = self
-            .elements
+            .element_pool
             .iter()
             .map(|variant| Ok(variant.codegen(&self)?))
             .collect_either()?;
@@ -203,7 +207,7 @@ impl Language {
 
         stream.extend(self.pratt_codegen());
 
-        //stream.extend(self.ast_codegen());
+        stream.extend(self.ast_codegen());
 
         Ok(stream)
     }
@@ -232,74 +236,102 @@ impl Language {
         }
     }
 
-    fn ast_codegen(&mut self) -> TokenStream {
-        let root = &self.elements[self.root.expect("root verified")];
+    pub fn ast_codegen(&mut self) -> TokenStream {
+        let root_ident: &Ident = self.element_pool[self.root.expect("root verified")]
+            .attribute
+            .name();
         let mut shapes: HashMap<Ident, AstShape> = HashMap::new();
 
-        // optional: keep the discovery order (helps make output deterministic)
-        let mut discovery: Vec<&Element> = Vec::new();
+        // Worklist stores HANDLES (cheap, Copy), not names.
+        let mut stack = vec![root_ident.clone()];
 
-        // ---- worklist seeded with the root
-        let mut stack = vec![root.attribute.name()];
+        // Track visited by handle to avoid touching ast_shapes for that check.
+        let mut seen = HashSet::new();
 
-        // while let Some(name) = stack.pop() {
-        //     // already discovered? then skip
-        //     if shapes.contains_key(&name) {
-        //         continue;
-        //     }
+        while let Some(ident) = stack.pop() {
 
-        //     // build this shape and insert it *immediately* to mark as discovered
-        //     let shape = self.elements[name]
-        //         .attribute
-        //         .ast_shape(&mut shapes, self)
-        //         .expect("shape build");
-        //     shapes.insert(name, shape);
-        //     discovery.push(name);
+            if !seen.insert(ident.clone()) {
+                continue; // already processed
+            }
 
-        //     // discover deps from the just-built shape and push the unknown ones
-        //     let deps = match shapes.get(&name).unwrap() {
-        //         AstShape::Token => Vec::new(),
-        //         AstShape::Enum { variants } => variants.clone(),
-        //         AstShape::Node { fields } => fields.clone(),
-        //         AstShape::Pratt { atom, prefix_ops, infix_ops } => {
-        //             let mut v = Vec::with_capacity(1 + prefix_ops.len() + infix_ops.len());
-        //             v.push(*atom);
-        //             v.extend(prefix_ops.iter().copied());
-        //             v.extend(infix_ops.iter().copied());
-        //             v
-        //         }
-        //     };
+            let shape = match shapes.get(&ident) {
+                Some(shape) => Some(shape.clone()),
+                None => {
+                    let handle = self.idents.get(&ident).expect("lang has been verified");
+                    let element = &self.element_pool[*handle];
 
-        //     for dep in deps {
-        //         if !shapes.contains_key(&dep) {
-        //             stack.push(dep);
-        //         }
-        //     }
-        // }
+                    element.attribute.ast_shape(&mut shapes, self)
+                }
+            };
+            eprintln!("visiting: {:?}\n\n", ident);
 
-        // // ---- codegen (order doesn't need to be topo if you rely on Rust name resolution)
-        // // using discovery order for stability; switch to `for (id, shape) in shapes.iter()` if you prefer.
-        // let mut pieces = Vec::new();
-        // for id in discovery {
-        //     let shape = &shapes[ &id ];
-        //     let ts = match shape {
-        //         AstShape::Token => quote! { /* token for #id */ },
-        //         AstShape::Enum { .. } => quote! { /* enum for #id */ },
-        //         AstShape::Node { .. } => quote! { /* node for #id */ },
-        //         AstShape::Pratt { .. } => quote! { /* pratt for #id */ },
-        //     };
-        //     pieces.push(ts);
-        // }
+            let mut deps = Vec::new();
 
-        // quote! { #(#pieces)* }
+            match &shape {
+                Some(shape) => {
+                    match shape {
+                        AstShape {
+                            kind: AstShapeKind::Token,
+                            ..
+                        } => {}
 
-        todo!()
+                        AstShape {
+                            kind: AstShapeKind::Enum { variants },
+                            ..
+                        } => {
+                            // map variant names -> handles
+                            deps.extend(variants.iter().cloned());
+                        }
+
+                        AstShape {
+                            kind: AstShapeKind::Node { fields },
+                            ..
+                        } => {
+                            deps.extend(fields.iter().map(|f| f.kind.clone()));
+                        }
+
+                        AstShape {
+                            kind:
+                                AstShapeKind::Pratt {
+                                    atom,
+                                    prefix_ops,
+                                    infix_ops,
+                                },
+                            ..
+                        } => {
+                            deps.push(atom.clone());
+                            deps.extend(prefix_ops.iter().cloned());
+                            deps.extend(infix_ops.iter().cloned());
+                        }
+                    }
+
+                }
+                None => (),
+            };
+
+            match shape{
+                Some(shape) => {
+                    shapes.insert(ident, shape);
+                },
+                None => ()
+            };
+
+            // Schedule discovery of dependencies
+            stack.extend(deps.iter().cloned());
+        }
+
+        // Emit
+        let pieces = shapes
+            .iter()
+            .map(|(ident, shape)| shape.codegen(&self.ident, ident));
+
+        quote! { #(#pieces)* }
     }
 }
 
 pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
     let mut language = Language {
-        elements: Pool::with_capacity(input.attrs.len() as u32),
+        element_pool: Pool::with_capacity(input.attrs.len() as u32),
         ident: input.ident.clone(),
         operators: vec![],
         root: None,
@@ -355,7 +387,7 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
         .idents
         .iter()
         .map(|(_, handle)| {
-            let element = &language.elements[*handle];
+            let element = &language.element_pool[*handle];
             (element.attribute.name().clone(), element)
         })
         .collect();

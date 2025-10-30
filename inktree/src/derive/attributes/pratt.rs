@@ -9,7 +9,7 @@ use crate::{
         attributes::{allowed::ALLOWED_PRATT, Node},
         parser::FromMeta,
         properties::{Property, PropertyKind},
-    }, language::{Element, ElementError, Language, LanguageElement}, AstShape
+    }, language::{Element, ElementError, Language, LanguageElement}, AstGenCtx, AstShape, AstShapeKind
 };
 
 #[derive(Debug)]
@@ -66,10 +66,17 @@ impl LanguageElement for Pratt {
         self.node.build(properties, language)
     }
 
-    fn ast_shape(&self, shapes: &mut HashMap<Ident,&Element>,language: &Language) -> Option<AstShape> {
-        let atom_name = format_ident!("{}Ast",self.name());
+    fn ast_shape(
+        &self,
+        ast_shapes: &mut HashMap<Ident, AstShape>,
+        language: &Language,
+    ) -> Option<AstShape> {
+        let mut ctx = AstGenCtx::new();
+        let atom_name = format_ident!("{}Atom",self.name());
+        let atom_shape = self.node.0.dsl.ast_shape(&atom_name, &mut ctx, ast_shapes);
+        ast_shapes.insert(atom_name.clone(), atom_shape);
 
-        Some(AstShape::Pratt {
+        Some(AstShape::new(AstShapeKind::Pratt {
             atom: atom_name,
             prefix_ops: language
                 .operators
@@ -83,6 +90,6 @@ impl LanguageElement for Pratt {
                 .filter(|op| op.is_infix())
                 .map(|op| op.ident.clone())
                 .collect(),
-        })
+        },self.name().clone()))
     }
 }

@@ -5,7 +5,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{AstShape, chumsky::prelude::*, derive::attributes::Rule, language::Element};
+use crate::{AstShapeKind, chumsky::prelude::*, derive::attributes::Rule, language::Element};
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum DslExpr {
@@ -485,4 +485,20 @@ mod tests {
         let expr = dsl_parser().parse(&tokens).unwrap();
         assert_eq!(expr, DslExpr::Plus(Box::new(id_expr("n"))));
     }
+}
+
+pub fn lexer_intconst<'src>()
+-> impl Parser<'src, &'src str, &'src str, extra::Err<Rich<'src, char>>> {
+    let bin = just("0").then(one_of("bB"));
+    let oct = just("0").then(one_of("oO"));
+    let hex = just("0").then(one_of("xX"));
+
+    let dec = text::int(10);
+
+    choice((
+        bin.then(text::int(2)).to_slice(),
+        oct.then(text::int(8)).to_slice(),
+        hex.then(text::int(16)).to_slice(),
+        dec,
+    ))
 }

@@ -7,9 +7,9 @@ use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
 pub enum MirError {
-    #[snafu(display("todo {:#?}",source))]
+    #[snafu(display("todo {:#?}", source))]
     FromHir { source: regex_syntax::Error },
-    #[snafu(display("todo {:#?}",look))]
+    #[snafu(display("todo {:#?}", look))]
     Look { look: Look },
 }
 

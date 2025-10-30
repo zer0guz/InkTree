@@ -13,11 +13,11 @@ use syn::{
 };
 
 use crate::{
-    derive::{
+    AstGenCtx, AstShape, AstShapeKind, derive::{
         attributes::allowed::ALLOWED_RULE,
         parser::{DslExpr, FromMeta, ParserCtx},
         properties::{Property, PropertyKind},
-    }, language::{Element, ElementError, Language, LanguageElement}, AstShape
+    }, language::{Element, ElementError, Language, LanguageElement}
 };
 
 #[derive(Debug, From)]
@@ -254,7 +254,13 @@ impl LanguageElement for Rule {
         Ok(())
     }
 
-    fn ast_shape(&self, shapes: &mut HashMap<Ident,&Element>,language: &Language) -> Option<AstShape>{
+    fn ast_shape(
+        &self,
+        ast_shapes: &mut HashMap<Ident, AstShape>,
+        language: &Language,
+    ) -> Option<AstShape> {
+        // let mut ctx = AstGenCtx::new();
+        // Some(self.dsl.ast_shape(&self.name,&mut ctx,ast_shapes))
         None
     }
 }
