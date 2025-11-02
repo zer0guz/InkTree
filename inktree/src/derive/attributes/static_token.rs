@@ -5,12 +5,15 @@ use quote::quote;
 use syn::{Ident, Lit, LitStr, MetaList};
 
 use crate::{
-    derive::{
+ Shape, derive::{
         attributes::allowed::ALLOWED_STATIC_TOKEN,
         parser::FromMeta,
-        properties::{try_handle_extra, Operator, Property, PropertyKind},
-    }, language::{Element, ElementError, Language, LanguageElement}, AstShape, AstShapeKind
+        properties::{Operator, Property, PropertyKind, try_handle_extra},
+    }, language::{Element, ElementError, Language, LanguageElement}
 };
+
+
+#[derive(Debug)]
 
 pub struct StaticToken {
     pub text: String,
@@ -115,12 +118,8 @@ impl LanguageElement for StaticToken {
 
     fn ast_shape(
         &self,
-        ast_shapes: &mut HashMap<Ident, AstShape>,
         language: &Language,
-    ) -> Option<AstShape> {
-        if self.ignored {
-            return None;
-        }
-        Some(AstShape::new(AstShapeKind::Token,self.name.clone()))
+    ) -> Option<Shape> {
+        if self.ignored { None } else { Some(Shape::Token(self.name().clone())) }
     }
 }

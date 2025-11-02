@@ -5,7 +5,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{AstShapeKind, chumsky::prelude::*, derive::attributes::Rule, language::Element};
+use crate::{Shape, chumsky::prelude::*, derive::attributes::Rule, language::Element};
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum DslExpr {
@@ -46,17 +46,17 @@ pub struct CallShape<'a> {
 }
 
 impl<'a> CallShape<'a> {
-    fn new(callee: Ident, args: &'a [DslExpr]) -> Self {
+    pub fn new(callee: Ident, args: &'a [DslExpr]) -> Self {
         CallShape::<'a> { callee, args: args }
     }
 }
 pub struct ParserCtx<'a> {
-    pub parameters: &'a HashSet<Ident>,
+    pub parameters: &'a [Ident],
     pub anchored: HashSet<Ident>,
 }
 
 impl<'a> ParserCtx<'a> {
-    pub fn new(parameters: &'a HashSet<Ident>, anchored: HashSet<Ident>) -> Self {
+    pub fn new(parameters: &'a [Ident], anchored: HashSet<Ident>) -> Self {
         Self {
             parameters,
             anchored,
@@ -111,6 +111,37 @@ impl DslExpr {
         }
     }
 
+    pub fn subst_params(&self, params: &[Ident], args: &[DslExpr]) -> DslExpr {
+        assert_eq!(params.len(), args.len(), "arity mismatch in subst_params");
+
+        fn go(e: &DslExpr, params: &[Ident], args: &[DslExpr]) -> DslExpr {
+            use DslExpr::*;
+            match e {
+                Just(id) => {
+                    if let Some(i) = params.iter().position(|p| p == id) {
+                        // also substitute *inside* the actual argument
+                        args[i].subst_params(params, args)
+                    } else {
+                        Just(id.clone())
+                    }
+                }
+                Seq(v)  => Seq(v.iter().map(|x| go(x, params, args)).collect()),
+                Opt(x)  => Opt(Box::new(go(x, params, args))),
+                Star(x) => Star(Box::new(go(x, params, args))),
+                Plus(x) => Plus(Box::new(go(x, params, args))),
+                Alt(v)  => Alt(v.iter().map(|x| go(x, params, args)).collect()),
+                Call { name, args: a } => Call {
+                    name: name.clone(),
+                    // recurse into call arguments too
+                    args: a.iter().map(|x| go(x, params, args)).collect(),
+                },
+            }
+        }
+
+        if params.is_empty() { return self.clone(); }
+        go(self, params, args)
+    }
+
     fn call_parser(name: &Ident, arg_tokens: &[TokenStream], ctx: &ParserCtx) -> TokenStream {
         if ctx.anchored.contains(name) {
             let ident = Ident::new(&name.to_string().to_lowercase(), Span::call_site());
@@ -129,12 +160,12 @@ impl DslExpr {
         }
     }
 
-    pub fn collect_deps(&self, parameters: &HashSet<Ident>, deps: &mut HashSet<Ident>) {
+    pub fn collect_deps(&self, parameters: &[Ident], deps: &mut Vec<Ident>) {
         match self {
             DslExpr::Just(name) => {
                 // Only add if it's not a parameter of the current rule
                 if !parameters.contains(name) {
-                    deps.insert(name.clone());
+                    deps.push(name.clone());
                 }
             }
             DslExpr::Seq(exprs) => {
@@ -152,7 +183,7 @@ impl DslExpr {
             }
             DslExpr::Call { name, args } => {
                 // Always add the callee
-                deps.insert(name.clone());
+                deps.push(name.clone());
                 // Args can themselves contain rule references
                 for a in args {
                     a.collect_deps(parameters, deps);
@@ -251,6 +282,7 @@ impl DslExpr {
             }
         }
     }
+
 }
 pub fn dsl_parser<'a>() -> impl Parser<'a, &'a [DslToken], DslExpr> {
     recursive(|expr| {

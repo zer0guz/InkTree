@@ -19,6 +19,8 @@ pub enum OperatorKind {
     Postfix(Postfix),
 }
 
+#[derive(Debug)]
+
 pub struct Operator {
     pub kind: OperatorKind,
     pub ident: Ident,

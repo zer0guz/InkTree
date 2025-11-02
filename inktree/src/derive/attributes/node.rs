@@ -7,11 +7,11 @@ use quote::quote;
 use syn::{Ident, MetaList};
 
 use crate::{
-    derive::{
+    LowerCtx, Shape, derive::{
         attributes::{allowed::ALLOWED_NODE, rule::Rule},
-        parser::{dsl_lexer, dsl_parser, FromMeta},
+        parser::{FromMeta, dsl_lexer, dsl_parser},
         properties::{Property, PropertyKind},
-    }, language::{Element, ElementError, Language, LanguageElement}, AstGenCtx, AstShape, AstShapeKind
+    }, language::{Element, ElementError, Language, LanguageElement}
 };
 
 #[derive(Debug, From)]
@@ -28,7 +28,7 @@ impl Node {
             .into_result()
             .expect("parser error todo")
             .into();
-        Ok(Self(Rule::new(dsl, name.clone(), HashSet::new())))
+        Ok(Self(Rule::new(dsl, name.clone(), Vec::new())))
     }
 }
 
@@ -78,12 +78,9 @@ impl LanguageElement for Node {
         self.0.build(properties, language)
     }
 
-    fn ast_shape(
-        &self,
-        ast_shapes: &mut HashMap<Ident, AstShape>,
-        language: &Language,
-    ) -> Option<AstShape> {
-        let mut ctx = AstGenCtx::new();
-        Some(self.0.dsl.ast_shape(self.name(), &mut ctx, ast_shapes))
+     fn ast_shape(&self, language: &Language) -> Option<Shape> {
+        // If the DSL fully prunes (e.g., only ignored tokens), drop the node.
+        let mut lc = LowerCtx::new(language);
+        lc.lower_rule_dsl(self.name(), &self.0.dsl)
     }
 }

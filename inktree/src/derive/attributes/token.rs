@@ -6,11 +6,13 @@ use regex_syntax::hir::Class;
 use syn::{Ident, Lit};
 
 use crate::{
+    Shape,
     derive::{
         attributes::allowed::ALLOWED_TOKEN,
         parser::{FromMeta, Mir},
-        properties::{try_handle_extra, Property, PropertyKind},
-    }, language::{Element, ElementError, Language, LanguageElement}, AstShape, AstShapeKind
+        properties::{Property, PropertyKind, try_handle_extra},
+    },
+    language::{Element, ElementError, Language, LanguageElement},
 };
 
 #[derive(Debug)]
@@ -177,14 +179,11 @@ impl LanguageElement for Token {
         Ok(())
     }
 
-    fn ast_shape(
-        &self,
-        ast_shapes: &mut HashMap<Ident, AstShape>,
-        language: &Language,
-    ) -> Option<AstShape> {
+    fn ast_shape(&self, language: &Language) -> Option<Shape> {
         if self.ignored {
-            return None;
+            None
+        } else {
+            Some(Shape::Token(self.name().clone()))
         }
-        Some(AstShape::new(AstShapeKind::Token,self.name.clone()))
     }
 }

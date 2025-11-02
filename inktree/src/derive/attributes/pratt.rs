@@ -5,11 +5,13 @@ use quote::{format_ident, quote};
 use syn::{Ident, MetaList};
 
 use crate::{
+    Cardinality, Item, LowerCtx, Member, Shape,
     derive::{
-        attributes::{allowed::ALLOWED_PRATT, Node},
+        attributes::{Node, allowed::ALLOWED_PRATT},
         parser::FromMeta,
         properties::{Property, PropertyKind},
-    }, language::{Element, ElementError, Language, LanguageElement}, AstGenCtx, AstShape, AstShapeKind
+    },
+    language::{Element, ElementError, Language, LanguageElement},
 };
 
 #[derive(Debug)]
@@ -26,7 +28,7 @@ impl Pratt {
         let base_body = self.node.0.parser_body(language);
 
         let pratt = quote! {
-            pratt_ext(#base_body,#lang_ident::#name_ident)
+            {pratt_ext(#base_body,#lang_ident::#name_ident)}
         };
 
         self.node.0.parser(pratt, language, true)
@@ -66,30 +68,7 @@ impl LanguageElement for Pratt {
         self.node.build(properties, language)
     }
 
-    fn ast_shape(
-        &self,
-        ast_shapes: &mut HashMap<Ident, AstShape>,
-        language: &Language,
-    ) -> Option<AstShape> {
-        let mut ctx = AstGenCtx::new();
-        let atom_name = format_ident!("{}Atom",self.name());
-        let atom_shape = self.node.0.dsl.ast_shape(&atom_name, &mut ctx, ast_shapes);
-        ast_shapes.insert(atom_name.clone(), atom_shape);
-
-        Some(AstShape::new(AstShapeKind::Pratt {
-            atom: atom_name,
-            prefix_ops: language
-                .operators
-                .iter()
-                .filter(|op| op.is_prefix())
-                .map(|op| op.ident.clone())
-                .collect(),
-            infix_ops: language
-                .operators
-                .iter()
-                .filter(|op| op.is_infix())
-                .map(|op| op.ident.clone())
-                .collect(),
-        },self.name().clone()))
+    fn ast_shape(&self, language: &Language) -> Option<Shape> {
+        LowerCtx::new(language).lower_pratt(self)
     }
 }

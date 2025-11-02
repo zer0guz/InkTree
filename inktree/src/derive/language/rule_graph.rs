@@ -9,10 +9,12 @@ use crate::{
     language::{Element, element},
 };
 
+#[derive(Debug,Default)]
 pub struct RuleGraph {
     pub adj: HashMap<Ident, HashSet<Ident>>, // dependency graph
 }
 
+#[derive(Debug)]
 pub struct RecursionInfo {
     pub components: Vec<HashSet<Ident>>,
     pub node_to_comp: HashMap<Ident, usize>,
@@ -39,8 +41,8 @@ impl RuleGraph {
         }
     }
 
-    pub fn add_rule(&mut self, name: Ident, deps: HashSet<Ident>) {
-        self.adj.entry(name).or_default().extend(deps);
+    pub fn add_rule(&mut self, name: Ident, deps: &[Ident]) {
+        self.adj.entry(name).or_default().extend(deps.iter().cloned());
     }
 
     pub(crate) fn into_recursive_info(

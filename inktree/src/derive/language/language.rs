@@ -1,15 +1,11 @@
 use crate::{
-    AstShape, AstShapeKind,
-    derive::{attributes::SyntaxAttributeKind, properties::OperatorKind},
-    language::{
+    Ast, derive::{attributes::SyntaxAttributeKind, properties::OperatorKind}, language::{
         element,
         rule_graph::{RecursionInfo, RuleGraph},
-    },
-    util::{Handle, Pool},
+    }, util::{Handle, Pool}
 };
 use std::collections::{HashMap, HashSet};
 
-use itertools::Itertools;
 use proc_macro2::TokenStream;
 use snafu::{ResultExt, Snafu};
 use strum::IntoDiscriminant;
@@ -52,6 +48,8 @@ pub enum Error {
     Element { source: ElementError },
 }
 
+
+#[derive(Debug)]
 pub(crate) struct Language {
     pub element_pool: Pool<Element>,
     pub ident: Ident,
@@ -237,96 +235,24 @@ impl Language {
     }
 
     pub fn ast_codegen(&mut self) -> TokenStream {
-        let root_ident: &Ident = self.element_pool[self.root.expect("root verified")]
-            .attribute
-            .name();
-        let mut shapes: HashMap<Ident, AstShape> = HashMap::new();
+       
+        let root = &self.element_pool[self.root.expect("root verified")];
 
-        // Worklist stores HANDLES (cheap, Copy), not names.
-        let mut stack = vec![root_ident.clone()];
+        let name = root.attribute.name().clone();
 
-        // Track visited by handle to avoid touching ast_shapes for that check.
-        let mut seen = HashSet::new();
+        Ast::build_from_root(self,&name).codegen(&self)
 
-        while let Some(ident) = stack.pop() {
+        // root
+        //     .attribute
+        //     .ast_shape(&self)
+        //     .
+        //     .simplify()
+        //     .codegen(&self.ident);
 
-            if !seen.insert(ident.clone()) {
-                continue; // already processed
-            }
-
-            let shape = match shapes.get(&ident) {
-                Some(shape) => Some(shape.clone()),
-                None => {
-                    let handle = self.idents.get(&ident).expect("lang has been verified");
-                    let element = &self.element_pool[*handle];
-
-                    element.attribute.ast_shape(&mut shapes, self)
-                }
-            };
-            eprintln!("visiting: {:?}\n\n", ident);
-
-            let mut deps = Vec::new();
-
-            match &shape {
-                Some(shape) => {
-                    match shape {
-                        AstShape {
-                            kind: AstShapeKind::Token,
-                            ..
-                        } => {}
-
-                        AstShape {
-                            kind: AstShapeKind::Enum { variants },
-                            ..
-                        } => {
-                            // map variant names -> handles
-                            deps.extend(variants.iter().cloned());
-                        }
-
-                        AstShape {
-                            kind: AstShapeKind::Node { fields },
-                            ..
-                        } => {
-                            deps.extend(fields.iter().map(|f| f.kind.clone()));
-                        }
-
-                        AstShape {
-                            kind:
-                                AstShapeKind::Pratt {
-                                    atom,
-                                    prefix_ops,
-                                    infix_ops,
-                                },
-                            ..
-                        } => {
-                            deps.push(atom.clone());
-                            deps.extend(prefix_ops.iter().cloned());
-                            deps.extend(infix_ops.iter().cloned());
-                        }
-                    }
-
-                }
-                None => (),
-            };
-
-            match shape{
-                Some(shape) => {
-                    shapes.insert(ident, shape);
-                },
-                None => ()
-            };
-
-            // Schedule discovery of dependencies
-            stack.extend(deps.iter().cloned());
-        }
-
-        // Emit
-        let pieces = shapes
-            .iter()
-            .map(|(ident, shape)| shape.codegen(&self.ident, ident));
-
-        quote! { #(#pieces)* }
+        
     }
+
+
 }
 
 pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {

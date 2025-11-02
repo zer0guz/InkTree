@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::{AstShape, AstShapeKind, derive::attributes::*, language::Error};
+use crate::{
+    Shape,
+    derive::{attributes::*, properties::Ast},
+};
 use enum_dispatch::enum_dispatch;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
@@ -35,6 +38,7 @@ pub enum ElementError {
     #[snafu(display("'{}': unknown property! expected one of: {}",source.to_string(), "todo!"))]
     Unsupported { source: syn::Error },
 }
+#[derive(Debug)]
 
 pub struct Element {
     pub attribute: SyntaxAttribute,
@@ -165,6 +169,10 @@ impl Element {
             _ => None,
         }
     }
+
+    pub fn is_ast_relevant(&self) -> bool {
+        !self.properties.contains(&Property::Ast(Ast::Ignored))
+    }
 }
 
 #[enum_dispatch]
@@ -183,9 +191,5 @@ pub trait LanguageElement: Sized {
 
     fn allowed(&self) -> &'static [PropertyKind];
 
-    fn ast_shape(
-        &self,
-        ast_shapes: &mut HashMap<Ident, AstShape>,
-        language: &Language,
-    ) -> Option<AstShape>;
+    fn ast_shape(&self, language: &Language) -> Option<Shape>;
 }

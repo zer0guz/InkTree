@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use chumsky::Parser;
+use chumsky::{Parser, prelude::todo};
 use derive_more::From;
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
@@ -13,22 +13,24 @@ use syn::{
 };
 
 use crate::{
-    AstGenCtx, AstShape, AstShapeKind, derive::{
+    Cardinality, Item, LowerCtx, Member, Shape,
+    derive::{
         attributes::allowed::ALLOWED_RULE,
         parser::{DslExpr, FromMeta, ParserCtx},
         properties::{Property, PropertyKind},
-    }, language::{Element, ElementError, Language, LanguageElement}
+    },
+    language::{Element, ElementError, Language, LanguageElement},
 };
 
 #[derive(Debug, From)]
 pub(crate) struct Rule {
     pub name: Ident,
-    pub parameters: HashSet<Ident>,
+    pub parameters: Vec<Ident>,
     pub dsl: DslExpr,
 }
 
 impl Rule {
-    pub fn new(dsl: DslExpr, name: Ident, parameters: HashSet<Ident>) -> Self {
+    pub fn new(dsl: DslExpr, name: Ident, parameters: Vec<Ident>) -> Self {
         Self {
             name,
             parameters,
@@ -159,7 +161,7 @@ impl Rule {
             if is_node {
                 quote! {
                     pub struct #name_ident;
-                    inktree::parseable!(#lang_ident::#name_ident, [$($param:ident),*],#body);
+                    inktree::parseable!(#lang_ident::#name_ident, [#(#param_idents),*],#body);
                 }
             } else {
                 quote! {
@@ -171,6 +173,10 @@ impl Rule {
                 }
             }
         }
+    }
+
+    fn substitute_args(&self, args: &[DslExpr]) -> DslExpr {
+        self.dsl.subst_params(&self.parameters, args)
     }
 }
 
@@ -193,7 +199,7 @@ impl Parse for Rule {
             let _: syn::Token![>] = input.parse()?;
             params.into_iter().collect()
         } else {
-            HashSet::new()
+            Vec::new()
         };
 
         // expect '='
@@ -241,26 +247,23 @@ impl LanguageElement for Rule {
         _properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {
-        // Insert into dependency graph
-
-        let mut deps = std::collections::HashSet::new();
+        // Collect in the original traversal order.
+        let mut deps: Vec<Ident> = Vec::new();
         self.dsl.collect_deps(&self.parameters, &mut deps);
-        for param in &self.parameters {
-            deps.remove(param);
-        }
 
-        language.cycle_graph.add_rule(self.name.clone(), deps);
+        // Remove formal parameters.
+        deps.retain(|d| !self.parameters.contains(d));
 
+        // Stable de-dup (keep first occurrence).
+        let mut seen = std::collections::HashSet::<Ident>::new();
+        deps.retain(|d| seen.insert(d.clone()));
+
+        language.cycle_graph.add_rule(self.name.clone(), &deps);
         Ok(())
     }
 
-    fn ast_shape(
-        &self,
-        ast_shapes: &mut HashMap<Ident, AstShape>,
-        language: &Language,
-    ) -> Option<AstShape> {
-        // let mut ctx = AstGenCtx::new();
-        // Some(self.dsl.ast_shape(&self.name,&mut ctx,ast_shapes))
-        None
+    fn ast_shape(&self, lang: &Language) -> Option<Shape> {
+        let mut cx = LowerCtx::new(lang);
+        cx.lower_rule_dsl(&self.name, &self.dsl)
     }
 }

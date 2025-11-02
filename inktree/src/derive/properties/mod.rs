@@ -16,12 +16,12 @@ use syn::Meta;
 pub use extra::*;
 pub use operator::*;
 pub use root::*;
+pub use ast::Ast;
 
 use crate::{
     derive::{
         parser::FromMeta,
         properties::{
-            ast::Ast,
             extra::Extra,
             operator::{Infix, Postfix, Prefix},
         },
