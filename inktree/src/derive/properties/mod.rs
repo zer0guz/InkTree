@@ -13,10 +13,10 @@ use derive_more::From;
 use strum::{EnumDiscriminants, EnumString};
 use syn::Meta;
 
+pub use ast::Ast;
 pub use extra::*;
 pub use operator::*;
 pub use root::*;
-pub use ast::Ast;
 
 use crate::{
     derive::{

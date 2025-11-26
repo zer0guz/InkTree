@@ -5,7 +5,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::Ident;
 
-use crate::{Shape, chumsky::prelude::*, derive::attributes::Rule, language::Element};
+use crate::{chumsky::prelude::*, language::Element};
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum DslExpr {
@@ -125,11 +125,11 @@ impl DslExpr {
                         Just(id.clone())
                     }
                 }
-                Seq(v)  => Seq(v.iter().map(|x| go(x, params, args)).collect()),
-                Opt(x)  => Opt(Box::new(go(x, params, args))),
+                Seq(v) => Seq(v.iter().map(|x| go(x, params, args)).collect()),
+                Opt(x) => Opt(Box::new(go(x, params, args))),
                 Star(x) => Star(Box::new(go(x, params, args))),
                 Plus(x) => Plus(Box::new(go(x, params, args))),
-                Alt(v)  => Alt(v.iter().map(|x| go(x, params, args)).collect()),
+                Alt(v) => Alt(v.iter().map(|x| go(x, params, args)).collect()),
                 Call { name, args: a } => Call {
                     name: name.clone(),
                     // recurse into call arguments too
@@ -138,7 +138,9 @@ impl DslExpr {
             }
         }
 
-        if params.is_empty() { return self.clone(); }
+        if params.is_empty() {
+            return self.clone();
+        }
         go(self, params, args)
     }
 
@@ -207,7 +209,7 @@ impl DslExpr {
         }
     }
 
-    pub fn first_nonterminals_with<'a>(
+    pub(crate) fn first_nonterminals_with<'a>(
         &'a self,
         origin: &Ident,
         nullable: &HashMap<Ident, bool>,
@@ -282,7 +284,6 @@ impl DslExpr {
             }
         }
     }
-
 }
 pub fn dsl_parser<'a>() -> impl Parser<'a, &'a [DslToken], DslExpr> {
     recursive(|expr| {
@@ -517,20 +518,4 @@ mod tests {
         let expr = dsl_parser().parse(&tokens).unwrap();
         assert_eq!(expr, DslExpr::Plus(Box::new(id_expr("n"))));
     }
-}
-
-pub fn lexer_intconst<'src>()
--> impl Parser<'src, &'src str, &'src str, extra::Err<Rich<'src, char>>> {
-    let bin = just("0").then(one_of("bB"));
-    let oct = just("0").then(one_of("oO"));
-    let hex = just("0").then(one_of("xX"));
-
-    let dec = text::int(10);
-
-    choice((
-        bin.then(text::int(2)).to_slice(),
-        oct.then(text::int(8)).to_slice(),
-        hex.then(text::int(16)).to_slice(),
-        dec,
-    ))
 }

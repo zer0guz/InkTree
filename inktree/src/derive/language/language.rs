@@ -1,10 +1,10 @@
 use crate::{
-    Ast, derive::{attributes::SyntaxAttributeKind, properties::OperatorKind}, language::{
-        element,
-        rule_graph::{RecursionInfo, RuleGraph},
-    }, util::{Handle, Pool}
+    Ast,
+    derive::{attributes::SyntaxAttributeKind, properties::OperatorKind},
+    language::rule_graph::{RecursionInfo, RuleGraph},
+    util::{Handle, Pool},
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use proc_macro2::TokenStream;
 use snafu::{ResultExt, Snafu};
@@ -47,7 +47,6 @@ pub enum Error {
     #[snafu(context(false))]
     Element { source: ElementError },
 }
-
 
 #[derive(Debug)]
 pub(crate) struct Language {
@@ -235,12 +234,11 @@ impl Language {
     }
 
     pub fn ast_codegen(&mut self) -> TokenStream {
-       
         let root = &self.element_pool[self.root.expect("root verified")];
 
         let name = root.attribute.name().clone();
 
-        Ast::build_from_root(self,&name).codegen(&self)
+        Ast::build_from_root(self, &name).codegen(&self)
 
         // root
         //     .attribute
@@ -248,11 +246,7 @@ impl Language {
         //     .
         //     .simplify()
         //     .codegen(&self.ident);
-
-        
     }
-
-
 }
 
 pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {

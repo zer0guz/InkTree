@@ -1,62 +1,123 @@
 #[macro_export]
-macro_rules! ast_token {
-    // without sink
-    ($lang_name:ident :: $name:ident, $ast_name:ident) => {
-        struct $ast_name {
-            syntax: $crate::cstree::syntax::SyntaxToken<$lang_name>,
+macro_rules! ast_node_kind {
+    // Simple form with alias name explicitly given
+    ($lang:ident::$variant:ident => $alias:ident) => {
+        /// Typed AST node alias (with typestate parameter).
+        pub type $alias<S> = $crate::AstNodeWrapper<$variant, S, $lang>;
+
+        unsafe impl $crate::Kind for $variant {
+            type Syntax = $lang;
+            const KINDS: &'static [Self::Syntax] = &[$lang::$variant];
         }
 
-        impl $crate::derive::AstToken for $ast_name {
-            type Syntax = $lang_name;
-            const KINDS: &[Self::Syntax] = &[$lang_name::$name];
-
-            fn syntax(&self) -> &$crate::cstree::syntax::SyntaxToken<$lang_name> {
-                &self.syntax
-            }
-
-            fn cast(syntax: $crate::cstree::syntax::SyntaxToken<$lang_name>) -> Option<Self>
-            where
-                Self: Sized,
-            {
-                if syntax.kind() == $lang_name::$name {
-                    Some($ast_name { syntax })
-                } else {
-                    None
-                }
-            }
-
-            fn text(&self) -> &str {
-                self.syntax.resolve_text(__inktree_support::resolver())
-            }
+        impl $crate::NodeKind for $variant {
+            type View<S: ::inktree::State> = AstNodeWrapper<$alias, S, $lang>;
         }
     };
 }
+
 #[macro_export]
-macro_rules! ast_node {
-    // without sink
-    ($lang_name:ident :: $name:ident, $ast_name:ident) => {
-        struct $ast_name {
-            syntax: $crate::cstree::syntax::SyntaxNode<$lang_name>,
+macro_rules! ast_token_kind {
+    ($lang:ident::$variant:ident => $alias:ident) => {
+        /// Typed AST token alias (with typestate parameter).
+        pub type $alias<S> = $crate::AstTokenWrapper<$variant, S, $lang>;
+
+        unsafe impl $crate::Kind for $variant {
+            type Syntax = $lang;
+            const KINDS: &'static [Self::Syntax] = &[$lang::$variant];
         }
 
-        impl $crate::derive::AstNode for $ast_name {
-            type Syntax = $lang_name;
-            const KINDS: &[Self::Syntax] = &[$lang_name::$name];
+        impl $crate::TokenKind for $variant {}
+    };
+}
 
-            fn syntax(&self) -> &$crate::cstree::syntax::SyntaxNode<$lang_name> {
-                &self.syntax
-            }
-
-            fn cast(syntax: $crate::cstree::syntax::SyntaxNode<$lang_name>) -> Option<Self>
-            where
-                Self: Sized,
-            {
-                if syntax.kind() == $lang_name::$name {
-                    Some($ast_name { syntax })
-                } else {
-                    None
+#[macro_export]
+macro_rules! struct_accessor_sig_impl {
+    (req_token, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> S::Out<#$ty<S::ChildStateStruct>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> S::Out<#$ty<S::ChildStateStruct>> {
+                    ::inktree::lift_token(self)
                 }
-            }
-        }
+            },
+        )
+    };
+    (req_node, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> S::Out<#$ty<S::ChildStateStruct>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> S::Out<#$ty<S::ChildStateStruct>> {
+                    ::inktree::lift_child(self)
+                }
+            },
+        )
+    };
+    (opt_token, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> ::core::option::Option<#$ty<S>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> ::core::option::Option<#$ty<S>> {
+                    ::inktree::token(&self)
+                }
+            },
+        )
+    };
+    (opt_node, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> ::core::option::Option<#$ty<S>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> ::core::option::Option<#$ty<S>> {
+                    ::inktree::child(&self)
+                }
+            },
+        )
+    };
+    (rep_token, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> ::std::vec::Vec<#$ty<S>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> ::std::vec::Vec<#$ty<S>> {
+                    use ::inktree::AstToken;
+                    self
+                        .children_with_tokens()
+                        .filter_map(|it| it.into_token())
+                        .filter_map(|t| <$ty<S> as AstToken>::cast(&t))
+                        .collect()
+                }
+            },
+        )
+    };
+    (rep_node, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> ::std::vec::Vec<#$ty<S>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> ::std::vec::Vec<#$ty<S>> {
+                    use ::inktree::AstNode;
+                    self
+                        .children()
+                        .filter_map(<$ty<S> as AstNode>::cast)
+                        .collect()
+                }
+            },
+        )
     };
 }

@@ -80,7 +80,7 @@ where
     })
 }
 
-#[derive(Debug,Default)]
+#[derive(Debug, Default)]
 pub struct Pool<T>(Vec<T>);
 
 impl<T> Pool<T> {

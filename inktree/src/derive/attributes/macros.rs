@@ -74,6 +74,7 @@ macro_rules! parseable {
 macro_rules! token {
     // without sink
     ($lang_name:ident :: $name:ident, $body:block) => {
+        #[derive(Debug)]
         pub(crate) struct $name;
         $crate::parseable!($lang_name::$name, [], {
             use $crate::chumsky::Parser;
@@ -85,6 +86,7 @@ macro_rules! token {
 
     // with sink
     ($lang_name:ident :: $name:ident, $body:block, has_extras) => {
+        #[derive(Debug)]
         pub(crate) struct $name;
         $crate::parseable!($lang_name::$name, [], {
             use $crate::chumsky::Parser;
@@ -99,6 +101,7 @@ macro_rules! token {
 macro_rules! static_token {
     // no sink
     ($lang_name:ident :: $name:ident, $text:literal) => {
+        #[derive(Debug)]
         pub struct $name;
         $crate::parseable!($lang_name::$name, [], {
             use $crate::chumsky::prelude::*;
@@ -109,6 +112,7 @@ macro_rules! static_token {
 
     // with sink (extras)
     ($lang_name:ident :: $name:ident, $text:literal, has_extras) => {
+        #[derive(Debug)]
         pub struct $name;
         $crate::parseable!($lang_name::$name, [], {
             use $crate::chumsky::prelude::*;
@@ -152,6 +156,7 @@ macro_rules! make_sink {
 macro_rules! node {
     // without sink
     ($lang_name:ident :: $name:ident, $body:block) => {
+        #[derive(Debug)]
         pub struct $name;
         $crate::parseable!($lang_name::$name, [], {
             use $crate::chumsky::Parser;

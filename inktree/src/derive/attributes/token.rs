@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
 use regex_syntax::hir::Class;
@@ -12,7 +10,7 @@ use crate::{
         parser::{FromMeta, Mir},
         properties::{Property, PropertyKind, try_handle_extra},
     },
-    language::{Element, ElementError, Language, LanguageElement},
+    language::{ElementError, Language, LanguageElement},
 };
 
 #[derive(Debug)]
@@ -179,7 +177,7 @@ impl LanguageElement for Token {
         Ok(())
     }
 
-    fn ast_shape(&self, language: &Language) -> Option<Shape> {
+    fn ast_shape(&self, _: &Language) -> Option<Shape> {
         if self.ignored {
             None
         } else {

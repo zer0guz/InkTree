@@ -11,12 +11,12 @@ use enum_dispatch::enum_dispatch;
 use strum::{EnumDiscriminants, EnumString, EnumTryAs};
 use syn::{Ident, Meta};
 
-#[derive(EnumDiscriminants, EnumTryAs,Debug)]
+#[derive(EnumDiscriminants, EnumTryAs, Debug)]
 #[strum_discriminants(vis(pub), strum(serialize_all = "snake_case"))]
 #[strum_discriminants(name(SyntaxAttributeKind), derive(EnumString))]
 #[enum_dispatch(LanguageElement)]
 
-pub enum SyntaxAttribute {
+pub(crate) enum SyntaxAttribute {
     StaticToken(StaticToken),
     Node(Node),
     Token(Token),

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{
     Shape,
     derive::{attributes::*, properties::Ast},
@@ -40,7 +38,7 @@ pub enum ElementError {
 }
 #[derive(Debug)]
 
-pub struct Element {
+pub(crate) struct Element {
     pub attribute: SyntaxAttribute,
     pub properties: Vec<Property>,
 }

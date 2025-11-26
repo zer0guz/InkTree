@@ -4,12 +4,9 @@ use std::{
 };
 use syn::Ident;
 
-use crate::{
-    derive::attributes::Rule,
-    language::{Element, element},
-};
+use crate::language::Element;
 
-#[derive(Debug,Default)]
+#[derive(Debug, Default)]
 pub struct RuleGraph {
     pub adj: HashMap<Ident, HashSet<Ident>>, // dependency graph
 }
@@ -42,7 +39,10 @@ impl RuleGraph {
     }
 
     pub fn add_rule(&mut self, name: Ident, deps: &[Ident]) {
-        self.adj.entry(name).or_default().extend(deps.iter().cloned());
+        self.adj
+            .entry(name)
+            .or_default()
+            .extend(deps.iter().cloned());
     }
 
     pub(crate) fn into_recursive_info(

@@ -1,21 +1,19 @@
-use std::collections::HashMap;
-
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use quote::quote;
 use syn::{Ident, MetaList};
 
 use crate::{
-    Cardinality, Item, LowerCtx, Member, Shape,
+    LowerCtx, Shape,
     derive::{
         attributes::{Node, allowed::ALLOWED_PRATT},
         parser::FromMeta,
         properties::{Property, PropertyKind},
     },
-    language::{Element, ElementError, Language, LanguageElement},
+    language::{ElementError, Language, LanguageElement},
 };
 
 #[derive(Debug)]
-pub struct Pratt {
+pub(crate) struct Pratt {
     pub node: Node,
 }
 

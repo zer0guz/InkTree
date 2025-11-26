@@ -1,6 +1,7 @@
 use crate::{
     derive::{attributes::Pratt, parser::DslExpr},
     language::{Language, LanguageElement},
+    struct_accessor_sig_impl,
 };
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -73,7 +74,7 @@ pub struct LowerCtx<'a> {
 }
 
 impl<'a> LowerCtx<'a> {
-    pub fn new(lang: &'a Language) -> Self {
+    pub(crate) fn new(lang: &'a Language) -> Self {
         Self {
             lang,
             fresh: 0,
@@ -129,7 +130,7 @@ impl<'a> LowerCtx<'a> {
         self.lower_shape(owner, dsl)
     }
 
-    pub fn lower_pratt(&mut self, pratt: &Pratt) -> Option<Shape> {
+    pub(crate) fn lower_pratt(&mut self, pratt: &Pratt) -> Option<Shape> {
         let owner = pratt.name();
         let atom = self.lower_item(owner, &pratt.node.0.dsl)?;
         let prefix_ops = self
@@ -469,7 +470,7 @@ pub struct Ast {
     pub tokens: std::collections::HashSet<Ident>,
 }
 impl Ast {
-    pub fn build_from_root(lang: &Language, root: &Ident) -> Ast {
+    pub(crate) fn build_from_root(lang: &Language, root: &Ident) -> Ast {
         fn fmt_ident_list(xs: &[Ident]) -> String {
             if xs.is_empty() {
                 return "[]".to_string();
@@ -561,9 +562,7 @@ impl Ast {
         out
     }
 
-    pub fn codegen(&self, language: &crate::language::Language) -> TokenStream {
-        let lang_ident = &language.ident;
-
+    pub(crate) fn codegen(&self, language: &crate::language::Language) -> TokenStream {
         let mut code = self.token_codegen(language);
 
         code.extend(self.node_codegen(&language));
@@ -579,13 +578,7 @@ impl Ast {
             .map(|name| {
                 let ast_name = format_ident!("{}Ast", name);
                 quote! {
-                    unsafe impl ::inktree::Kind for #name {
-                        type Syntax = #lang_ident;
-                        const KINDS: &'static [Self::Syntax] = &[ #lang_ident::#name ];
-                    }
-                    impl ::inktree::TokenKind for #name {}
-
-                    pub type #ast_name<S> = ::inktree::AstTokenWrapper<#name, S, #lang_ident>;
+                    ::inktree::ast_token_kind!(#lang_ident::#name => #ast_name);
                 }
             })
             .collect()
@@ -598,13 +591,7 @@ impl Ast {
             .map(|(name, shape)| {
                 let ast_name = format_ident!("{}Ast", name);
                 let shared_code = quote! {
-                    pub type #ast_name<S> = ::inktree::AstTokenWrapper<#name, S, #lang_ident>;
-                    unsafe impl ::inktree::Kind for #name {
-                        type Syntax = #lang_ident;
-                        const KINDS: &'static [Self::Syntax] = &[ #lang_ident::#name ];
-                    }
-                    impl ::inktree::NodeKind for #name {}
-
+                    ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name);
                 };
                 match shape {
                     Shape::Pratt {
@@ -617,8 +604,8 @@ impl Ast {
                         // Variants are <TokenName>Ast(<TokenName>Ast<S>)
                         let prefix_op_ty = format_ident!("{}PrefixOp", name);
                         let infix_op_ty = format_ident!("{}InfixOp", name);
-                        let prefix_expr = format_ident!("{}PrefixExpr", name);
-                        let infix_expr = format_ident!("{}InfixExpr", name);
+                        let prefix_expr = format_ident!("{}Prefix", name);
+                        let infix_expr = format_ident!("{}Infix", name);
 
                         let prefix_variants = prefix_ops.iter().map(|op| {
                             let v = format_ident!("{}Ast", op);
@@ -651,33 +638,128 @@ impl Ast {
 
                             /// Prefix expression payload for this Pratt node.
                             pub struct #prefix_expr<S: ::inktree::State> {
-                                pub op: #prefix_op_ty<S::Child>,
-                                pub rhs: #ast_name<S::Child>,
+                                pub op: #prefix_op_ty<S::ChildStateStruct>,
+                                pub rhs: #ast_name<S::ChildStateStruct>,
                             }
 
                             /// Infix expression payload for this Pratt node.
                             pub struct #infix_expr<S: ::inktree::State> {
-                                pub lhs: #ast_name<S::Child>,
-                                pub op:  #infix_op_ty<S::Child>,
-                                pub rhs: #ast_name<S::Child>,
+                                pub lhs: #ast_name<S::ChildStateStruct>,
+                                pub op:  #infix_op_ty<S::ChildStateStruct>,
+                                pub rhs: #ast_name<S::ChildStateStruct>,
                             }
-
-                            // NOTE:
-                            // Accessor trait (e.g. <Name>AstExt) can be generated to pattern match
-                            // the CST children and assemble these payloads. That logic depends on
-                            // how you want to expose:
-                            //  - atoms (tokens vs node-calls => requires Language lookup),
-                            //  - Optional/Repeated and S::Out<T> policy,
-                            //  - postfix handling.
-                            //
-                            // Once you settle the exact signatures, I can auto-emit:
-                            //   trait #ast_name Ext<S: inktree::State> { fn as_prefix(&self) -> Option<#prefix_expr<S>>; ... }
-                            // using `inktree::{token, child}` under the hood.
                         }
                     }
-                    Shape::Struct { members } => quote! {},
-                    Shape::Enum { members } => quote! {},
-                    Shape::Token(ident) => unreachable!("tokens are stored seperatly"),
+                    Shape::Struct { members } => {
+                        let ext_trait = format_ident!("{}AstExt", name);
+
+                        let mut sigs = Vec::<TokenStream>::new();
+                        let mut impls = Vec::<TokenStream>::new();
+
+                        for m in members {
+                            if let Some((sig, imp)) = gen_struct_member_accessor(&self.tokens, m) {
+                                sigs.push(sig);
+                                impls.push(imp);
+                            }
+                        }
+
+                        quote! {
+                            #shared_code
+
+                            pub trait #ext_trait<S: ::inktree::State> {
+                                #( #sigs )*
+                            }
+
+                            impl<S: ::inktree::State> #ext_trait<S> for #ast_name<S> {
+                                #( #impls )*
+                            }
+                        }
+                    }
+
+                    Shape::Enum { members } => {
+                       let ext_trait = format_ident!("{}AstExt", name);
+                        let enum_name = format_ident!("{}AstEnum", name);
+
+                        // enum <Name>AstEnum<S> {
+                        //     <VariantLabel>(<UnderlyingAst<S>>),
+                        //     ...
+                        // }
+                        let enum_variants = members.iter().map(|m| {
+                            let variant_label = &m.label; // deduped label (A, A2, KwPub, ...)
+                            match &m.item {
+                                Item::Named(underlying) => {
+                                    // e.g. KwPub -> KwPubAst<S>
+                                    let payload_ty = format_ident!("{}Ast", underlying);
+                                    quote! {
+                                        #variant_label(#payload_ty<S>)
+                                    }
+                                }
+                                Item::Inline(_) => {
+                                    // Top-level enums with inline shapes aren't handled yet.
+                                    // You can extend this later to generate per-variant payload
+                                    // structs/enums if you want richer enum nodes.
+                                    panic!("inline enum variants are not yet supported in inktree AST codegen");
+                                }
+                            }
+                        });
+
+                        // match self.kind() {
+                        //   TestLang::KwPub => NameAstEnum::KwPub(token(self.syntax()).expect(...)),
+                        //   TestLang::FooNode => NameAstEnum::Foo(child(self.syntax()).expect(...)),
+                        //   ...
+                        // }
+                        let match_arms = members.iter().map(|m| {
+                            let variant_label = &m.label;
+                            match &m.item {
+                                Item::Named(underlying) => {
+                                    let kind_ident = underlying; // syntax kind in TestLang
+                                    if self.tokens.contains(underlying) {
+                                        // Variant backed by a *token*
+                                        quote! {
+                                            #lang_ident::#kind_ident => #enum_name::#variant_label(
+                                                ::inktree::token(self.syntax())
+                                                    .expect("enum nodes should always be structurally valid"),
+                                            )
+                                        }
+                                    } else {
+                                        // Variant backed by a *node*
+                                        quote! {
+                                            #lang_ident::#kind_ident => #enum_name::#variant_label(
+                                                ::inktree::child(self.syntax())
+                                                    .expect("enum nodes should always be structurally valid"),
+                                            )
+                                        }
+                                    }
+                                }
+                                Item::Inline(_) => {
+                                    panic!("inline enum variants are not yet supported in inktree AST codegen");
+                                }
+                            }
+                        });
+
+                        quote! {
+                            #shared_code
+
+                            /// View enum for the `#name` AST node.
+                            pub enum #enum_name<S> {
+                                #( #enum_variants, )*
+                            }
+
+                            pub trait #ext_trait<S: ::inktree::State> {
+                                fn enum_view(&self) -> #enum_name<S::ChildStateEnum>;
+                            }
+
+                            impl<S: ::inktree::State> #ext_trait<S> for #ast_name<S> {
+                                fn enum_view(&self) -> #enum_name<S::ChildStateEnum> {
+                                    match self.kind() {
+                                        #( #match_arms, )*
+                                        _ => unreachable!("enum nodes should always be structurally valid"),
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Shape::Token(_) => unreachable!("tokens are stored seperatly"),
                 }
             })
             .collect()
@@ -685,8 +767,6 @@ impl Ast {
 }
 
 // ===== helpers =====
-
-use crate::State;
 
 fn to_snake_ident(src: &Ident) -> Ident {
     let s = src.to_string();
@@ -707,6 +787,45 @@ fn to_snake_ident(src: &Ident) -> Ident {
         }
         _ => Ident::new(&out, src.span()),
     }
+}
+
+fn gen_struct_member_accessor(
+    tokens: &std::collections::HashSet<Ident>,
+    m: &Member,
+) -> Option<(TokenStream, TokenStream)> {
+    let field_name = &m.label;
+
+    // Map Item::Named(T) -> TAst
+    let (item_ty_ident, is_token) = match &m.item {
+        Item::Named(id) => {
+            let alias = format_ident!("{}Ast", id);
+            let is_token = tokens.contains(id);
+            (alias, is_token)
+        }
+        Item::Inline(_) => {
+            // Skip anonymous inline shapes for now
+            return None;
+        }
+    };
+
+    let (sig, impl_) = match (m.cardinality, is_token) {
+        (Cardinality::One, true) => struct_accessor_sig_impl!(req_token, field_name, item_ty_ident),
+        (Cardinality::One, false) => struct_accessor_sig_impl!(req_node, field_name, item_ty_ident),
+        (Cardinality::Optional, true) => {
+            struct_accessor_sig_impl!(opt_token, field_name, item_ty_ident)
+        }
+        (Cardinality::Optional, false) => {
+            struct_accessor_sig_impl!(opt_node, field_name, item_ty_ident)
+        }
+        (Cardinality::Repeated, true) => {
+            struct_accessor_sig_impl!(rep_token, field_name, item_ty_ident)
+        }
+        (Cardinality::Repeated, false) => {
+            struct_accessor_sig_impl!(rep_node, field_name, item_ty_ident)
+        }
+    };
+
+    Some((sig, impl_))
 }
 
 #[cfg(test)]

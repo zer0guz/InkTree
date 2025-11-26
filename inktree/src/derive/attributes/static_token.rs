@@ -1,17 +1,16 @@
-use std::collections::HashMap;
-
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Ident, Lit, LitStr, MetaList};
 
 use crate::{
- Shape, derive::{
+    Shape,
+    derive::{
         attributes::allowed::ALLOWED_STATIC_TOKEN,
         parser::FromMeta,
         properties::{Operator, Property, PropertyKind, try_handle_extra},
-    }, language::{Element, ElementError, Language, LanguageElement}
+    },
+    language::{ElementError, Language, LanguageElement},
 };
-
 
 #[derive(Debug)]
 
@@ -116,10 +115,11 @@ impl LanguageElement for StaticToken {
         Ok(())
     }
 
-    fn ast_shape(
-        &self,
-        language: &Language,
-    ) -> Option<Shape> {
-        if self.ignored { None } else { Some(Shape::Token(self.name().clone())) }
+    fn ast_shape(&self, _: &Language) -> Option<Shape> {
+        if self.ignored {
+            None
+        } else {
+            Some(Shape::Token(self.name().clone()))
+        }
     }
 }

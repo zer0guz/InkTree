@@ -1,5 +1,3 @@
-use std::collections::{HashMap, HashSet};
-
 use chumsky::Parser;
 use derive_more::From;
 use proc_macro2::TokenStream;
@@ -7,15 +5,17 @@ use quote::quote;
 use syn::{Ident, MetaList};
 
 use crate::{
-    LowerCtx, Shape, derive::{
+    LowerCtx, Shape,
+    derive::{
         attributes::{allowed::ALLOWED_NODE, rule::Rule},
         parser::{FromMeta, dsl_lexer, dsl_parser},
         properties::{Property, PropertyKind},
-    }, language::{Element, ElementError, Language, LanguageElement}
+    },
+    language::{ElementError, Language, LanguageElement},
 };
 
 #[derive(Debug, From)]
-pub struct Node(pub Rule);
+pub(crate) struct Node(pub Rule);
 
 impl Node {
     pub fn from_string(input: String, name: &Ident) -> Result<Self, syn::Error> {
@@ -78,7 +78,7 @@ impl LanguageElement for Node {
         self.0.build(properties, language)
     }
 
-     fn ast_shape(&self, language: &Language) -> Option<Shape> {
+    fn ast_shape(&self, language: &Language) -> Option<Shape> {
         // If the DSL fully prunes (e.g., only ignored tokens), drop the node.
         let mut lc = LowerCtx::new(language);
         lc.lower_rule_dsl(self.name(), &self.0.dsl)

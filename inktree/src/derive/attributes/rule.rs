@@ -1,6 +1,6 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use chumsky::{Parser, prelude::todo};
+use chumsky::Parser;
 use derive_more::From;
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
@@ -13,13 +13,13 @@ use syn::{
 };
 
 use crate::{
-    Cardinality, Item, LowerCtx, Member, Shape,
+    LowerCtx, Shape,
     derive::{
         attributes::allowed::ALLOWED_RULE,
         parser::{DslExpr, FromMeta, ParserCtx},
         properties::{Property, PropertyKind},
     },
-    language::{Element, ElementError, Language, LanguageElement},
+    language::{ElementError, Language, LanguageElement},
 };
 
 #[derive(Debug, From)]
@@ -173,10 +173,6 @@ impl Rule {
                 }
             }
         }
-    }
-
-    fn substitute_args(&self, args: &[DslExpr]) -> DslExpr {
-        self.dsl.subst_params(&self.parameters, args)
     }
 }
 
