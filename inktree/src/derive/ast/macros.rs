@@ -11,7 +11,7 @@ macro_rules! ast_node_kind {
         }
 
         impl $crate::NodeKind for $variant {
-            type View<S: ::inktree::State> = AstNodeWrapper<$alias, S, $lang>;
+            type View<S: ::inktree::State> = AstNodeWrapper<$variant, S, $lang>;
         }
     };
 }
@@ -36,11 +36,11 @@ macro_rules! struct_accessor_sig_impl {
     (req_token, $field:ident, $ty:ident) => {
         (
             quote! {
-                fn #$field(&self) -> S::Out<#$ty<S::ChildStateStruct>>;
+                fn #$field(&self) -> S::Out<#$ty<S::ChildState>>;
             },
             quote! {
                 #[inline]
-                fn #$field(&self) -> S::Out<#$ty<S::ChildStateStruct>> {
+                fn #$field(&self) -> S::Out<#$ty<S::ChildState>> {
                     ::inktree::lift_token(self)
                 }
             },
@@ -49,11 +49,11 @@ macro_rules! struct_accessor_sig_impl {
     (req_node, $field:ident, $ty:ident) => {
         (
             quote! {
-                fn #$field(&self) -> S::Out<#$ty<S::ChildStateStruct>>;
+                fn #$field(&self) -> S::Out<#$ty<S::ChildState>>;
             },
             quote! {
                 #[inline]
-                fn #$field(&self) -> S::Out<#$ty<S::ChildStateStruct>> {
+                fn #$field(&self) -> S::Out<#$ty<S::ChildState>> {
                     ::inktree::lift_child(self)
                 }
             },

@@ -638,15 +638,15 @@ impl Ast {
 
                             /// Prefix expression payload for this Pratt node.
                             pub struct #prefix_expr<S: ::inktree::State> {
-                                pub op: #prefix_op_ty<S::ChildStateStruct>,
-                                pub rhs: #ast_name<S::ChildStateStruct>,
+                                pub op: #prefix_op_ty<S::ChildState>,
+                                pub rhs: #ast_name<S::ChildState>,
                             }
 
                             /// Infix expression payload for this Pratt node.
                             pub struct #infix_expr<S: ::inktree::State> {
-                                pub lhs: #ast_name<S::ChildStateStruct>,
-                                pub op:  #infix_op_ty<S::ChildStateStruct>,
-                                pub rhs: #ast_name<S::ChildStateStruct>,
+                                pub lhs: #ast_name<S::ChildState>,
+                                pub op:  #infix_op_ty<S::ChildState>,
+                                pub rhs: #ast_name<S::ChildState>,
                             }
                         }
                     }
@@ -745,18 +745,6 @@ impl Ast {
                                 #( #enum_variants, )*
                             }
 
-                            pub trait #ext_trait<S: ::inktree::State> {
-                                fn enum_view(&self) -> #enum_name<S::ChildStateEnum>;
-                            }
-
-                            impl<S: ::inktree::State> #ext_trait<S> for #ast_name<S> {
-                                fn enum_view(&self) -> #enum_name<S::ChildStateEnum> {
-                                    match self.kind() {
-                                        #( #match_arms, )*
-                                        _ => unreachable!("enum nodes should always be structurally valid"),
-                                    }
-                                }
-                            }
                         }
                     }
                     Shape::Token(_) => unreachable!("tokens are stored seperatly"),
