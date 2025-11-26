@@ -66,9 +66,6 @@ pub trait View: Sized {
     /// Wrap a raw AST node of this `Kind` + `State` into this view.
     fn from_raw(raw: AstNodeWrapper<Self::Kind, Self::State, <Self::Kind as Kind>::Syntax>)
     -> Self;
-
-    /// Borrow the underlying raw node (useful for child access).
-    fn raw(&self) -> &AstNodeWrapper<Self::Kind, Self::State, <Self::Kind as Kind>::Syntax>;
 }
 
 impl<K, S, Sy> View for AstNodeWrapper<K, S, Sy>
@@ -82,10 +79,6 @@ where
 
     fn from_raw(raw: AstNodeWrapper<K, S, Sy>) -> Self {
         raw
-    }
-
-    fn raw(&self) -> &AstNodeWrapper<K, S, Sy> {
-        self
     }
 }
 
