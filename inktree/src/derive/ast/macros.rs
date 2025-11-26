@@ -14,6 +14,19 @@ macro_rules! ast_node_kind {
             type View<S: ::inktree::State> = AstNodeWrapper<$variant, S, $lang>;
         }
     };
+    ($lang:ident::$variant:ident => $alias:ident, $ast_enum:ty) => {
+        /// Typed AST node alias (with typestate parameter).
+        pub type $alias<S> = $crate::AstNodeWrapper<$variant, S, $lang>;
+
+        unsafe impl $crate::Kind for $variant {
+            type Syntax = $lang;
+            const KINDS: &'static [Self::Syntax] = &[$lang::$variant];
+        }
+
+        impl $crate::NodeKind for $variant {
+            type View<S: ::inktree::State> = $ast_enum;
+        }
+    };
 }
 
 #[macro_export]

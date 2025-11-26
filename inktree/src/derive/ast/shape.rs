@@ -738,13 +738,25 @@ impl Ast {
                         });
 
                         quote! {
-                            #shared_code
+                            ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name, #enum_name<S>);
 
                             /// View enum for the `#name` AST node.
                             pub enum #enum_name<S> {
                                 #( #enum_variants, )*
                             }
 
+                            // pub trait #ext_trait<S: ::inktree::State> {
+                            //     fn enum_view(&self) -> #enum_name<S::ChildStateEnum>;
+                            // }
+
+                            // impl<S: ::inktree::State> #ext_trait<S> for #ast_name<S> {
+                            //     fn enum_view(&self) -> #enum_name<S::ChildStateEnum> {
+                            //         match self.kind() {
+                            //             #( #match_arms, )*
+                            //             _ => unreachable!("enum nodes should always be structurally valid"),
+                            //         }
+                            //     }
+                            // }
                         }
                     }
                     Shape::Token(_) => unreachable!("tokens are stored seperatly"),
