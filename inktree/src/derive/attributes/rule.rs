@@ -140,6 +140,7 @@ impl Rule {
 
             if is_node {
                 quote! {
+                    #[derive(Debug)]
                     pub struct #name_ident;
                     impl #name_ident {
                         inktree::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
@@ -149,6 +150,7 @@ impl Rule {
                 }
             } else {
                 quote! {
+                    #[derive(Debug)]
                     pub struct #name_ident;
                     impl #name_ident {
                         inktree::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
@@ -160,11 +162,13 @@ impl Rule {
         } else {
             if is_node {
                 quote! {
+                    #[derive(Debug)]
                     pub struct #name_ident;
                     inktree::parseable!(#lang_ident::#name_ident, [#(#param_idents),*],#body);
                 }
             } else {
                 quote! {
+                    #[derive(Debug)]
                     pub struct #name_ident;
                     impl #name_ident {
                         inktree::make_parser!(#lang_ident,[#(#param_idents),*],{#body});

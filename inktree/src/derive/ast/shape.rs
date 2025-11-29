@@ -1,12 +1,17 @@
 use crate::{
-    derive::{attributes::Pratt, parser::DslExpr},
+    derive::{
+        attributes::{Pratt, SyntaxAttribute},
+        parser::DslExpr,
+    },
     language::{Language, LanguageElement},
-    struct_accessor_sig_impl,
 };
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::DefaultHasher,
+};
 use syn::Ident;
 
 // ===== IR =====
@@ -57,7 +62,7 @@ struct CallKey {
 }
 
 fn fingerprint_args(args: &[DslExpr]) -> u64 {
-    let mut h = std::collections::hash_map::DefaultHasher::new();
+    let mut h = DefaultHasher::new();
     for a in args {
         a.hash(&mut h);
     }
@@ -104,24 +109,6 @@ impl<'a> LowerCtx<'a> {
                 el.rule().is_none() && !el.is_ast_relevant()
             }
             None => false,
-        }
-    }
-    /// If `shape` is a trivial wrapper around a single named thing,
-    /// return that name so callers can avoid wrapping it as `Inline`.
-    fn peel_named_from_shape(&self, shape: &Shape) -> Option<syn::Ident> {
-        match shape {
-            Shape::Struct { members } if members.len() == 1 => {
-                let m = &members[0];
-                if m.cardinality == Cardinality::One {
-                    if let Item::Named(id) = &m.item {
-                        return Some(id.clone());
-                    }
-                }
-                None
-            }
-            // Single-variant enums are already collapsed in `lower_shape`,
-            // so we don’t handle `Enum` here.
-            _ => None,
         }
     }
 
@@ -241,7 +228,7 @@ impl<'a> LowerCtx<'a> {
             Call { name, args } => self.lower_call_item(owner, name, args),
             _ => {
                 let s = self.lower_shape(owner, e)?;
-                if let Some(named) = self.peel_named_from_shape(&s) {
+                if let Some(named) = s.peel_named() {
                     Some(Item::Named(named))
                 } else {
                     Some(Item::Inline(Box::new(s)))
@@ -303,8 +290,17 @@ impl<'a> LowerCtx<'a> {
             }
             Call { name, args } => {
                 let item = self.lower_call_item(owner, name, args)?;
+                let label_id = if variant {
+                    match &item {
+                        Item::Named(inner) => inner,
+                        _ => name,
+                    }
+                } else {
+                    name
+                };
+
                 Some(Member {
-                    label: label_for_named(self, name),
+                    label: label_for_named(self, label_id),
                     cardinality: card,
                     item,
                 })
@@ -389,6 +385,7 @@ impl<'a> LowerCtx<'a> {
     // ---------- call handling with positional substitution ----------
     fn lower_call_item(&mut self, owner: &Ident, name: &Ident, args: &[DslExpr]) -> Option<Item> {
         let Some(&h) = self.lang.idents.get(name) else {
+            // Unknown callee: treat as leaf
             return Some(Item::Named(name.clone()));
         };
         let el = &self.lang.element_pool[h];
@@ -399,6 +396,7 @@ impl<'a> LowerCtx<'a> {
                 args_fp: fingerprint_args(args),
             };
             if !self.visiting.insert(key.clone()) {
+                // Param-recursive instantiation: bail out to avoid infinite inline
                 return Some(Item::Named(name.clone()));
             }
 
@@ -412,7 +410,14 @@ impl<'a> LowerCtx<'a> {
             let node = self.lower_shape(owner, &body)?;
 
             self.visiting.remove(&key);
-            Some(Item::Inline(Box::new(node)))
+
+            // 👇 NEW bit: if the inlined shape is just a struct around a single Named,
+            // treat the call as if it directly produced that Named.
+            if let Some(named) = node.peel_named() {
+                Some(Item::Named(named))
+            } else {
+                Some(Item::Inline(Box::new(node)))
+            }
         } else {
             if self.prune_ignored_tokens && self.is_ignored_token(name) {
                 None
@@ -421,6 +426,96 @@ impl<'a> LowerCtx<'a> {
             }
         }
     }
+}
+
+macro_rules! struct_accessor_sig_impl {
+    (req_token, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> S::Out<#$ty<S::ChildState>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> S::Out<#$ty<S::ChildState>> {
+                    ::inktree::lift_token(self)
+                }
+            },
+        )
+    };
+    (req_node, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> S::Out<#$ty<S::ChildState>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> S::Out<#$ty<S::ChildState>> {
+                    ::inktree::lift_child(self)
+                }
+            },
+        )
+    };
+    (opt_token, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> ::core::option::Option<#$ty<S>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> ::core::option::Option<#$ty<S>> {
+                    ::inktree::token(&self)
+                }
+            },
+        )
+    };
+    (opt_node, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> ::core::option::Option<#$ty<S>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> ::core::option::Option<#$ty<S>> {
+                    ::inktree::child(&self)
+                }
+            },
+        )
+    };
+    (rep_token, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> ::std::vec::Vec<#$ty<S>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> ::std::vec::Vec<#$ty<S>> {
+                    use ::inktree::AstToken;
+                    self
+                        .children_with_tokens()
+                        .filter_map(|it| it.into_token())
+                        .filter_map(|t| <$ty<S> as AstToken>::cast(&t))
+                        .collect()
+                }
+            },
+        )
+    };
+    (rep_node, $field:ident, $ty:ident) => {
+        (
+            quote! {
+                fn #$field(&self) -> ::std::vec::Vec<#$ty<S>>;
+            },
+            quote! {
+                #[inline]
+                fn #$field(&self) -> ::std::vec::Vec<#$ty<S>> {
+                    use ::inktree::AstNode;
+                    self
+                        .children()
+                        .filter_map(<$ty<S> as AstNode>::cast)
+                        .collect()
+                }
+            },
+        )
+    };
 }
 
 // ===== deps collection + root driver =====
@@ -452,6 +547,20 @@ impl Shape {
             }
         }
     }
+    pub fn peel_named(&self) -> Option<Ident> {
+        match self {
+            Shape::Struct { members } if members.len() == 1 => {
+                let m = &members[0];
+                if m.cardinality == Cardinality::One {
+                    if let Item::Named(id) = &m.item {
+                        return Some(id.clone());
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
 }
 impl Item {
     pub fn collect_deps_into(&self, out: &mut Vec<Ident>) {
@@ -466,8 +575,10 @@ impl Item {
 
 #[derive(Debug, Default)]
 pub struct Ast {
-    pub nodes: std::collections::HashMap<Ident, Shape>,
-    pub tokens: std::collections::HashSet<Ident>,
+    pub nodes: HashMap<Ident, Shape>,
+    pub tokens: HashSet<Ident>,
+    pub rules: HashMap<Ident, Shape>,
+    pub anon_shapes: HashMap<Ident, Shape>,
 }
 impl Ast {
     pub(crate) fn build_from_root(lang: &Language, root: &Ident) -> Ast {
@@ -588,134 +699,160 @@ impl Ast {
         let lang_ident = &language.ident;
 
         self.nodes
-        .iter()
-        .map(|(name, shape)| {
-            let ast_name = format_ident!("{}Ast", name);
-            let shared_code = quote! {
-                ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name);
-            };
-            match shape {
-                Shape::Pratt {
-                    atom: _,
-                    prefix_ops,
-                    infix_ops,
-                    postfix_ops,
-                } => {
-                    // Pratt payload scaffolding: PrefixOp / InfixOp + PrefixExpr / InfixExpr
-                    // Variants are <TokenName>Ast(<TokenName>Ast<S>)
-                    let prefix_op_ty = format_ident!("{}PrefixOp", name);
-                    let infix_op_ty = format_ident!("{}InfixOp", name);
-                    let prefix_expr = format_ident!("{}Prefix", name);
-                    let infix_expr = format_ident!("{}Infix", name);
+            .iter()
+            .map(|(name, shape)| {
+                let ast_name = format_ident!("{}Ast", name);
+                let ast_enum = format_ident!("{}AstEnum", name);
 
-                    let prefix_variants = prefix_ops.iter().map(|op| {
-                        let v = format_ident!("{}Ast", op);
-                        let t = format_ident!("{}Ast", op);
-                        quote! { #v(#t<S>) }
-                    });
+                match shape {
+                    Shape::Pratt {
+                        atom,
+                        prefix_ops,
+                        infix_ops,
+                        postfix_ops,
+                    } => {
+                        let atom_ast_name = format_ident!("{}AtomAst", name);
+                        let atom_ast = match atom {
+                            Item::Named(ident) => {
+                                if let SyntaxAttribute::Rule(rule) = &language.element_by_name(ident).attribute {
+                                    todo!("aaah rule as pratt atom")
+                                };
+                                quote! {}
+                            }
+                            Item::Inline(inner_shape) => match inner_shape.as_ref() {
+                                Shape::Struct { members: _ } => todo!("struct"),
+                                Shape::Enum { members } => {
+                                    let marker_name = format_ident!("{}AtomMarker", name);
+                                    let atom_ast_enum_name = format_ident!("{}AtomAstEnum", name);
+                                    let enum_variants = members.iter().map(|m| {
+                                        let name = &m.label;
+                                        use SyntaxAttribute::*;
+                                        let ty = match language.element_by_name(name).attribute {
+                                            StaticToken(_) | Token(_) => quote! {Token},
+                                            _ => quote! {Node},
+                                        };
 
-                    let infix_variants = infix_ops.iter().map(|op| {
-                        let v = format_ident!("{}Ast", op);
-                        let t = format_ident!("{}Ast", op);
-                        quote! { #v(#t<S>) }
-                    });
+                                        quote! {#name:#ty}
+                                    });
+                                    eprintln!("{:#?}",enum_variants);
 
-                    // (Postfix support can be added the same way if you decide to surface it:
-                    //   enum <Name>PostfixOp<S> { ... } and a <Name>PostfixExpr<S> struct)
-                    let _postfix_unused = postfix_ops; // keep lints quiet until you surface it
+                                    quote! {
+                                        ::inktree::ast_node_anon_enum!(#lang_ident::#marker_name(#( #enum_variants| )*) => #atom_ast_name,#atom_ast_enum_name);
+                                    }
+                                }
+                                _ => unreachable!("inline shape cant be token/pratt"),
+                            },
+                        };
+                        let prefix_op_ty = format_ident!("{}PrefixOp", name);
+                        let infix_op_ty = format_ident!("{}InfixOp", name);
+                        let prefix_expr = format_ident!("{}Prefix", name);
+                        let infix_expr = format_ident!("{}Infix", name);
 
-                    quote! {
-                        #shared_code
+                        let prefix_variants = prefix_ops.iter().map(|op| {
+                            let v = format_ident!("{}Ast", op);
+                            let t = format_ident!("{}Ast", op);
+                            quote! { #v(#t<S>) }
+                        });
 
-                        /// Operator enum for prefix expressions inside this Pratt node.
-                        pub enum #prefix_op_ty<S> {
-                            #( #prefix_variants, )*
-                        }
+                        let infix_variants = infix_ops.iter().map(|op| {
+                            let v = format_ident!("{}Ast", op);
+                            let t = format_ident!("{}Ast", op);
+                            quote! { #v(#t<S>) }
+                        });
 
-                        /// Operator enum for infix expressions inside this Pratt node.
-                        pub enum #infix_op_ty<S> {
-                            #( #infix_variants, )*
-                        }
+                        // (Postfix support can be added the same way if you decide to surface it:
+                        //   enum <Name>PostfixOp<S> { ... } and a <Name>PostfixExpr<S> struct)
+                        let _postfix_unused = postfix_ops; // keep lints quiet until you surface it
 
-                        /// Prefix expression payload for this Pratt node.
-                        pub struct #prefix_expr<S: ::inktree::State> {
-                            pub op: #prefix_op_ty<S::ChildState>,
-                            pub rhs: #ast_name<S::ChildState>,
-                        }
+                        quote! {
+                            #atom_ast
 
-                        /// Infix expression payload for this Pratt node.
-                        pub struct #infix_expr<S: ::inktree::State> {
-                            pub lhs: #ast_name<S::ChildState>,
-                            pub op:  #infix_op_ty<S::ChildState>,
-                            pub rhs: #ast_name<S::ChildState>,
+                            ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name,#ast_enum);
+
+                            /// Operator enum for prefix expressions inside this Pratt node.
+                            #[derive(Debug)]
+                            pub enum #prefix_op_ty<S> {
+                                #( #prefix_variants, )*
+                            }
+
+                            /// Operator enum for infix expressions inside this Pratt node.
+                            #[derive(Debug)]
+                            pub enum #infix_op_ty<S> {
+                                #( #infix_variants, )*
+                            }
+
+                            /// Prefix expression payload for this Pratt node.
+                            #[derive(Debug)]
+                            pub struct #prefix_expr<S: ::inktree::State> {
+                                pub op: #prefix_op_ty<S>,
+                                pub rhs: #ast_name<S>,
+                            }
+
+                            /// Infix expression payload for this Pratt node.
+                            #[derive(Debug)]
+                            pub struct #infix_expr<S: ::inktree::State> {
+                                pub lhs: #ast_name<S>,
+                                pub op:  #infix_op_ty<S>,
+                                pub rhs: #ast_name<S>,
+                            }
                         }
                     }
-                }
-                Shape::Struct { members } => {
-                    let ext_trait = format_ident!("{}AstExt", name);
+                    Shape::Struct { members } => {
+                        let ext_trait = format_ident!("{}AstExt", name);
 
-                    let mut sigs = Vec::new();
-                    let mut impls = Vec::new();
-                    let mut required_childs = TokenStream::new();
+                        let mut sigs = Vec::new();
+                        let mut impls = Vec::new();
+                        let mut required_childs = TokenStream::new();
 
-                    for m in members {
-                        if let Some((sig, imp)) = gen_struct_member_accessor(&self.tokens, m) {
-                            sigs.push(sig);
-                            impls.push(imp);
-                        }
-                        let member_name = &m.label;
-                        match &m.item {
-                            Item::Named(ident) => {
-                                match m.cardinality {
+                        for m in members {
+                            if let Some((sig, imp)) = gen_struct_member_accessor(&self.tokens, m) {
+                                sigs.push(sig);
+                                impls.push(imp);
+                            }
+                            match &m.item {
+                                Item::Named(ident) => match m.cardinality {
                                     Cardinality::One => {
                                         required_childs.extend(quote! {
                                             unsafe impl ::inktree::RequiredChild<#ident> for #name{}
                                         });
-                                    },
+                                    }
                                     Cardinality::Optional => (),
                                     Cardinality::Repeated => todo!(),
-                                }
-                            },
-                            Item::Inline(shape) => todo!("fix me pls here"),
+                                },
+                                Item::Inline(shape) => todo!("fix me pls here"),
+                            }
+                        }
+
+                        quote! {
+                            ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name);
+
+                            #required_childs
+
+                            pub trait #ext_trait<S: ::inktree::State> {
+                                #( #sigs )*
+                            }
+
+                            impl<S: ::inktree::State> #ext_trait<S> for #ast_name<S> {
+                                #( #impls )*
+                            }
                         }
                     }
-
-                    quote! {
-                        #shared_code
-
-                        #required_childs
-
-                        pub trait #ext_trait<S: ::inktree::State> {
-                            #( #sigs )*
-                        }
-
-                        impl<S: ::inktree::State> #ext_trait<S> for #ast_name<S> {
-                            #( #impls )*
-                        }
-                    }
-                }
-                Shape::Enum { members } => {
+                    Shape::Token(_) => unreachable!("tokens are stored seperatly"),
+                    Shape::Enum { members } => {
                         let enum_name = format_ident!("{}AstEnum", name);
-
-                        // enum <Name>AstEnum<S> {
-                        //     <VariantLabel>(<UnderlyingAst<S>>),
-                        //     ...
-                        // }
                         let enum_variants = members.iter().map(|m| {
                             let variant_label = &m.label; // deduped label (A, A2, KwPub, ...)
                             match &m.item {
                                 Item::Named(underlying) => {
-                                    // e.g. KwPub -> KwPubAst<S>
                                     let payload_ty = format_ident!("{}Ast", underlying);
                                     quote! {
                                         #variant_label(#payload_ty<S>)
                                     }
                                 }
-                                Item::Inline(_) => {
-                                    // Top-level enums with inline shapes aren't handled yet.
-                                    // You can extend this later to generate per-variant payload
-                                    // structs/enums if you want richer enum nodes.
-                                    panic!("inline enum variants are not yet supported in inktree AST codegen");
+                                Item::Inline(inline) => {
+                                    eprintln!("Shape: {:#?}",shape);
+                                    eprintln!("Inline: {:#?}",inline);
+                                    panic!("inline enum variants are not yet supported in inktree AST codegen!!!");
                                 }
                             }
                         });
@@ -754,32 +891,35 @@ impl Ast {
                             }
                         });
                         quote! {
-                            ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name, #enum_name<S>);
+                            ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name, #enum_name);
 
                             /// View enum for the `#name` AST node.
                             pub enum #enum_name<S> {
                                 #( #enum_variants, )*
                             }
 
-                            impl<S: ::inktree::State> ::inktree::View for #enum_name<S> {
-                                type Kind = #name;
+                            // impl<S: ::inktree::State> ::inktree::View for #enum_name<S> {
+                            //     type Kind = #name;
 
-                                type State = S;
-                                fn from_raw(
-                                    raw: AstNodeWrapper<Self::Kind, Self::State, <Self::Kind as Kind>::Syntax>,
-                                ) -> Self {
-                                    match raw.kind() {
-                                        #( #match_arms, )*
-                                        _ => unreachable!("enum nodes should always be structurally valid"),
-                                    }
-                                }
-                            }
+                            //     type State = S;
+                            //     fn from_raw(
+                            //         raw: inktree::cstree::prelude::SyntaxElement<
+                            //             <Self::Kind as Kind>::Syntax,
+                            //             inktree::ParseError,
+                            //         >,
+                            //     ) -> Self {
+                            //         let raw = raw.as_
+                            //         match raw.kind() {
+                            //             #( #match_arms, )*
+                            //             _ => unreachable!("enum nodes should always be structurally valid"),
+                            //         }
+                            //     }
+                            // }
                         }
                     }
-                Shape::Token(_) => unreachable!("tokens are stored seperatly"),
-            }
-        })
-        .collect()
+                }
+            })
+            .collect()
     }
 }
 

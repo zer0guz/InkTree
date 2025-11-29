@@ -70,6 +70,13 @@ impl Language {
         return Ok(());
     }
 
+    pub(crate) fn element_by_name(&self,name: &Ident) -> &Element {
+        let handle = self.idents.get(name).expect("verified lang ident not in idents");
+
+        &self.element_pool[*handle]
+
+    }
+
     fn syntax_impl(&self) -> TokenStream {
         let (static_texts, parsers): (Vec<_>, Vec<_>) = self
             .element_pool

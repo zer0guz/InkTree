@@ -2,7 +2,7 @@ mod macros;
 mod shape;
 mod state;
 
-use cstree::interning::Resolver;
+use cstree::{interning::Resolver, syntax::SyntaxElement};
 pub use shape::*;
 pub use state::*;
 
@@ -23,11 +23,28 @@ pub struct AstNodeWrapper<K, S, Sy: Syntax>(
     pub(crate) PhantomData<(K, S)>,
 );
 
+impl<K,S,Sy> From<SyntaxNode<Sy>> for AstNodeWrapper<K, S, Sy> 
+where Sy:Syntax
+{
+    fn from(value: SyntaxNode<Sy>) -> Self {
+        Self(value, PhantomData)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AstTokenWrapper<K, S, Sy: Syntax>(
     pub(crate) SyntaxToken<Sy>,
     pub(crate) PhantomData<(K, S)>,
 );
+
+impl<K,S,Sy> From<SyntaxToken<Sy>> for AstTokenWrapper<K, S, Sy> 
+where Sy:Syntax
+{
+    fn from(value: SyntaxToken<Sy>) -> Self {
+        Self(value, PhantomData)
+    }
+}
+
 
 impl<K, S, Sy: Syntax> AstTokenWrapper<K, S, Sy> {
     pub fn new(syntax_token: SyntaxToken<Sy>) -> Self {
@@ -52,6 +69,7 @@ impl<K, S, Sy: Syntax> Deref for AstTokenWrapper<K, S, Sy> {
 /// Mismatches can violate verified invariants in your accessors.
 pub unsafe trait Kind {
     type Syntax: Syntax;
+    type Wrapper<S>;
     const KINDS: &'static [Self::Syntax];
 }
 
@@ -60,11 +78,11 @@ pub unsafe trait Kind {
 pub unsafe trait RequiredChild<P>: NodeKind {}
 
 pub trait View: Sized {
-    type Kind: NodeKind;
+    type Kind: Kind;
     type State: State;
 
     /// Wrap a raw AST node of this `Kind` + `State` into this view.
-    fn from_raw(raw: AstNodeWrapper<Self::Kind, Self::State, <Self::Kind as Kind>::Syntax>)
+    fn from_raw(raw: SyntaxElement<<Self::Kind as Kind>::Syntax,ParseError>)
     -> Self;
 }
 
@@ -77,8 +95,11 @@ where
     type Kind = K;
     type State = S;
 
-    fn from_raw(raw: AstNodeWrapper<K, S, Sy>) -> Self {
-        raw
+    fn from_raw(raw: SyntaxElement<<Self::Kind as Kind>::Syntax,ParseError>) -> Self {
+        match raw {
+            cstree::util::NodeOrToken::Node(node) => node.into(),
+            _ => unreachable!(),
+        }
     }
 }
 
