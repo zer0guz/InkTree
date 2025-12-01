@@ -7,7 +7,6 @@ macro_rules! ast_node_kind {
 
         unsafe impl $crate::Kind for $variant {
             type Syntax = $lang;
-            type Wrapper<S> = $alias<S>;
             const KINDS: &'static [Self::Syntax] = &[$lang::$variant];
         }
 
@@ -17,11 +16,11 @@ macro_rules! ast_node_kind {
     };
     ($lang:ident::$variant:ident => $alias:ident, $ast_enum:ident) => {
         /// Typed AST node alias (with typestate parameter).
-        pub type $alias<S> = $crate::AstNodeWrapper<$variant, S, $lang>;
+        pub type $alias<S: ::inktree::State> = $crate::AstNodeWrapper<$variant, S, $lang>;
 
         unsafe impl $crate::Kind for $variant {
             type Syntax = $lang;
-            type Wrapper<S> = $alias<S>;
+
 
             const KINDS: &'static [Self::Syntax] = &[$lang::$variant];
         }
@@ -40,7 +39,6 @@ macro_rules! ast_token_kind {
 
         unsafe impl $crate::Kind for $variant {
             type Syntax = $lang;
-            type Wrapper<S> = $alias<S>;
             const KINDS: &'static [Self::Syntax] = &[$lang::$variant];
         }
 
@@ -48,22 +46,117 @@ macro_rules! ast_token_kind {
     };
 }
 #[macro_export]
+macro_rules! enum_view_impl {
+    // Public entry:
+    //
+    //   enum_view_impl!(TestLang::ExprAtomMarker(
+    //       Number:Token | Ident:Token | Expr:Node |
+    //   ) for ExprAtomAstEnum);
+    //
+    ($lang:ident::$kind:ident( $( $variant:ident : $vkind:ident )|+ $(|)? ) for $enum_name:ident) => {
+        impl<S: $crate::State> $crate::View for $enum_name<S> {
+            type Kind = $kind;
+            type State = S;
+
+            fn from_raw_token(
+                raw: $crate::SyntaxToken<
+                    <Self::Kind as $crate::Kind>::Syntax
+                >,
+            ) -> Self {
+                match raw.kind() {
+                    $(
+                        $lang::$variant => $crate::enum_view_impl!(@from_raw_token_variant
+                            $enum_name, $variant, $vkind, raw
+                        ),
+                    )*
+                    _ => unreachable!("anon enum element kind not in KINDS (token)"),
+                }
+            }
+
+            fn from_raw_node(
+                raw: $crate::SyntaxNode<
+                    <Self::Kind as $crate::Kind>::Syntax
+                >,
+            ) -> Self {
+                match raw.kind() {
+                    $(
+                        $lang::$variant => $crate::enum_view_impl!(@from_raw_node_variant
+                            $enum_name, $variant, $vkind, raw
+                        ),
+                    )*
+                    _ => unreachable!("anon enum element kind not in KINDS (node)"),
+                }
+            }
+        }
+    };
+
+    // ---------- helpers for from_raw_token ----------
+
+    // Token variants are allowed in from_raw_token
+    (@from_raw_token_variant $enum_name:ident, $variant:ident, Token, $raw:ident) => {
+        $enum_name::$variant($raw.clone().into())
+    };
+
+    // Node variants should never go through from_raw_token
+    (@from_raw_token_variant $enum_name:ident, $variant:ident, Node, $raw:ident) => {
+        unreachable!(
+            concat!(
+                "anon enum variant `",
+                stringify!($variant),
+                "` is declared as Node but from_raw_token was called"
+            )
+        )
+    };
+
+    // ---------- helpers for from_raw_node ----------
+
+    // Node variants are allowed in from_raw_node
+    (@from_raw_node_variant $enum_name:ident, $variant:ident, Node, $raw:ident) => {
+        $enum_name::$variant($raw.clone().into())
+    };
+
+    // Token variants should never go through from_raw_node
+    (@from_raw_node_variant $enum_name:ident, $variant:ident, Token, $raw:ident) => {
+        unreachable!(
+            concat!(
+                "anon enum variant `",
+                stringify!($variant),
+                "` is declared as Token but from_raw_node was called"
+            )
+        )
+    };
+}
+
+#[macro_export]
 macro_rules! ast_node_anon_enum {
-    // Public entry
+    // Public entry:
+    //
+    //   ast_node_anon_enum!(TestLang::ExprAtomMarker(
+    //       Number:Token | Ident:Token | Expr:Node |
+    //   ) => ExprAtomAst, ExprAtomAstEnum);
+    //
     ($lang:ident::$name:ident( $( $variant:ident : $vkind:ident )|+ $(|)? ) => $alias:ident,$enum_name:ident) => {
+        #[derive(Debug)]
         pub struct $name;
 
-        // enum ExprAtomAstEnum<S> { Number(NumberAst<S>), Expr(ExprAst<S>), ... }
+        // enum ExprAtomAstEnum<S> {
+        //   Number(AstTokenWrapper<Number, S, TestLang>),
+        //   Ident(AstTokenWrapper<Ident, S, TestLang>),
+        //   Expr(AstNodeWrapper<Expr, S, TestLang>),
+        // }
         pub enum $enum_name<S: $crate::State> {
-            $( $variant(<$variant as $crate::Kind>::Wrapper<S>), )*
+            $(
+                $variant(
+                    $crate::ast_node_anon_enum!(@variant_ty $lang, $variant, $vkind, S)
+                ),
+            )*
         }
 
-        // type ExprAtomAst<S> = AstNodeWrapper<TestMarker, S, TestLang>;
+        // type ExprAtomAst<S> = AstNodeWrapper<ExprAtomMarker, S, TestLang>;
         pub type $alias<S> = $crate::AstNodeWrapper<$name, S, $lang>;
 
         unsafe impl $crate::Kind for $name {
             type Syntax = $lang;
-            type Wrapper<S> = $alias<S>;
             const KINDS: &'static [Self::Syntax] = &[
                 $( $lang::$variant, )*
             ];
@@ -73,45 +166,19 @@ macro_rules! ast_node_anon_enum {
             type View<S: $crate::State> = $enum_name<S>;
         }
 
-        impl<S: $crate::State> $crate::View for $enum_name<S> {
-            type Kind = $name;
-            type State = S;
-
-            fn from_raw(
-                raw: $crate::cstree::prelude::SyntaxElement<
-                    <Self::Kind as $crate::Kind>::Syntax,
-                    $crate::ParseError,
-                >,
-            ) -> Self {
-                match raw.kind() {
-                    $(
-                        $lang::$variant => $crate::ast_node_anon_enum!(@from_raw_variant
-                            $enum_name, $variant, $vkind, raw
-                        ),
-                    )*
-                    _ => unreachable!("anon enum element kind not in KINDS"),
-                }
-            }
-        }
+        // Reuse the generic View impl
+        $crate::enum_view_impl!($lang::$name( $( $variant : $vkind )|* ) for $enum_name);
     };
 
-    // Helper arm for Token variants
-    (@from_raw_variant $enum_name:ident, $variant:ident, Token, $raw:ident) => {
-        $enum_name::$variant(
-            $raw.as_token()
-                .expect("anon enum variant is declared as Token but got Node")
-                .clone()
-                .into()
-        )
+    // ---------- type selection for enum fields ----------
+
+    // Token variant → AstTokenWrapper<Variant, S, Lang>
+    (@variant_ty $lang:ident, $variant:ident, Token, $S:ident) => {
+        $crate::AstTokenWrapper<$variant, $S, $lang>
     };
 
-    // Helper arm for Node variants
-    (@from_raw_variant $enum_name:ident, $variant:ident, Node, $raw:ident) => {
-        $enum_name::$variant(
-            $raw.as_node()
-                .expect("anon enum variant is declared as Node but got Token")
-                .clone()
-                .into()
-        )
+    // Node variant → AstNodeWrapper<Variant, S, Lang>
+    (@variant_ty $lang:ident, $variant:ident, Node, $S:ident) => {
+        $crate::AstNodeWrapper<$variant, $S, $lang>
     };
 }

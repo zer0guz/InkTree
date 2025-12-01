@@ -2,7 +2,7 @@ mod macros;
 mod shape;
 mod state;
 
-use cstree::{interning::Resolver, syntax::SyntaxElement};
+use cstree::{interning::Resolver};
 pub use shape::*;
 pub use state::*;
 
@@ -23,8 +23,9 @@ pub struct AstNodeWrapper<K, S, Sy: Syntax>(
     pub(crate) PhantomData<(K, S)>,
 );
 
-impl<K,S,Sy> From<SyntaxNode<Sy>> for AstNodeWrapper<K, S, Sy> 
-where Sy:Syntax
+impl<K, S, Sy> From<SyntaxNode<Sy>> for AstNodeWrapper<K, S, Sy>
+where
+    Sy: Syntax,
 {
     fn from(value: SyntaxNode<Sy>) -> Self {
         Self(value, PhantomData)
@@ -37,14 +38,33 @@ pub struct AstTokenWrapper<K, S, Sy: Syntax>(
     pub(crate) PhantomData<(K, S)>,
 );
 
-impl<K,S,Sy> From<SyntaxToken<Sy>> for AstTokenWrapper<K, S, Sy> 
-where Sy:Syntax
+impl<K, Sy> AstNodeWrapper<K, Verified, Sy>
+where
+    K: NodeKind<Syntax = Sy>,
+    Sy: Syntax,
+{
+    pub fn view(&self) -> K::View<Verified> {
+        <K::View<Verified> as View>::from_raw_node(self.0.clone())
+    }
+}
+impl<K, Sy> AstNodeWrapper<K, HasErrors, Sy>
+where
+    K: NodeKind<Syntax = Sy>,
+    Sy: Syntax,
+{
+    pub fn view(&self) -> K::View<HasErrors> {
+        <K::View<HasErrors> as View>::from_raw_node(self.0.clone())
+    }
+}
+
+impl<K, S, Sy> From<SyntaxToken<Sy>> for AstTokenWrapper<K, S, Sy>
+where
+    Sy: Syntax,
 {
     fn from(value: SyntaxToken<Sy>) -> Self {
         Self(value, PhantomData)
     }
 }
-
 
 impl<K, S, Sy: Syntax> AstTokenWrapper<K, S, Sy> {
     pub fn new(syntax_token: SyntaxToken<Sy>) -> Self {
@@ -69,7 +89,6 @@ impl<K, S, Sy: Syntax> Deref for AstTokenWrapper<K, S, Sy> {
 /// Mismatches can violate verified invariants in your accessors.
 pub unsafe trait Kind {
     type Syntax: Syntax;
-    type Wrapper<S>;
     const KINDS: &'static [Self::Syntax];
 }
 
@@ -82,8 +101,8 @@ pub trait View: Sized {
     type State: State;
 
     /// Wrap a raw AST node of this `Kind` + `State` into this view.
-    fn from_raw(raw: SyntaxElement<<Self::Kind as Kind>::Syntax,ParseError>)
-    -> Self;
+    fn from_raw_token(raw: SyntaxToken<<Self::Kind as Kind>::Syntax>) -> Self;
+    fn from_raw_node(raw: SyntaxNode<<Self::Kind as Kind>::Syntax>) -> Self;
 }
 
 impl<K, S, Sy> View for AstNodeWrapper<K, S, Sy>
@@ -94,12 +113,13 @@ where
 {
     type Kind = K;
     type State = S;
-
-    fn from_raw(raw: SyntaxElement<<Self::Kind as Kind>::Syntax,ParseError>) -> Self {
-        match raw {
-            cstree::util::NodeOrToken::Node(node) => node.into(),
-            _ => unreachable!(),
-        }
+    
+    fn from_raw_token(_raw: SyntaxToken<<Self::Kind as Kind>::Syntax>) -> Self {
+        unreachable!()
+    }
+    
+    fn from_raw_node(raw: SyntaxNode<<Self::Kind as Kind>::Syntax>) -> Self {
+        raw.into()
     }
 }
 
@@ -115,9 +135,10 @@ pub trait AstNode: Sized {
 }
 
 pub trait AstToken: Sized {
-    type Syntax: Syntax;
-    fn cast(tok: &SyntaxToken<Self::Syntax>) -> Option<Self>;
-    fn syntax(&self) -> &SyntaxToken<Self::Syntax>;
+    type Kind: TokenKind;
+
+    fn cast(tok: &SyntaxToken<<Self::Kind as Kind>::Syntax>) -> Option<Self>;
+    fn syntax(&self) -> &SyntaxToken<<Self::Kind as Kind>::Syntax>;
     fn text<'resolve>(&self, resolver: &'resolve impl Resolver) -> &'resolve str;
 }
 
@@ -137,15 +158,15 @@ impl<K: NodeKind<Syntax = Sy>, S, Sy: Syntax> AstNode for AstNodeWrapper<K, S, S
 }
 
 impl<K: TokenKind<Syntax = Sy>, S, Sy: Syntax> AstToken for AstTokenWrapper<K, S, Sy> {
-    type Syntax = <K as Kind>::Syntax;
-    fn cast(t: &SyntaxToken<Self::Syntax>) -> Option<Self> {
+    type Kind = K;
+    fn cast(t: &SyntaxToken<<Self::Kind as Kind>::Syntax>) -> Option<Self> {
         if K::KINDS.contains(&t.kind()) {
             Some(Self(t.clone(), PhantomData))
         } else {
             None
         }
     }
-    fn syntax(&self) -> &SyntaxToken<Self::Syntax> {
+    fn syntax(&self) -> &SyntaxToken<<Self::Kind as Kind>::Syntax> {
         &self.0
     }
     fn text<'resolve>(&self, resolver: &'resolve impl Resolver) -> &'resolve str {
@@ -162,10 +183,9 @@ where
 }
 
 #[inline]
-pub fn token<T, Sy>(parent: &SyntaxNode<Sy>) -> Option<T>
+pub fn token<T>(parent: &SyntaxNode<<T::Kind as Kind>::Syntax>) -> Option<T>
 where
-    T: AstToken<Syntax = Sy>,
-    Sy: Syntax,
+    T: AstToken,
 {
     parent
         .children_with_tokens()
@@ -183,10 +203,10 @@ pub fn lift_token<S: State, K: TokenKind<Syntax = Sy>, P: NodeKind<Syntax = Sy>,
     parent: &AstNodeWrapper<P, S, Sy>,
 ) -> S::Out<AstTokenWrapper<K, S::ChildState, Sy>>
 where
-    AstTokenWrapper<K, S, Sy>: AstToken<Syntax = Sy>,
+    AstTokenWrapper<K, S, Sy>: AstToken<Kind = K>,
     P: RequiredChild<K>,
 {
-    let opt = token::<AstTokenWrapper<_, S, _>, _>(&parent.0);
+    let opt = token::<AstTokenWrapper<_, S, _>>(&parent.0);
     unsafe { S::lift(opt) }
 }
 

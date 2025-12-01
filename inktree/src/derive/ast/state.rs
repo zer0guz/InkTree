@@ -80,12 +80,12 @@ where
 {
     unsafe fn assume_verified(self) -> K::View<Verified> {
         let raw_verified: AstNodeWrapper<K, Unchecked, Sy> = self.rebind();
-        <K::View<Verified> as View>::from_raw(cstree::util::NodeOrToken::Node(raw_verified.0))
+        <K::View<Verified> as View>::from_raw_node(raw_verified.0)
     }
 
     fn into_has_errors(self) -> K::View<HasErrors> {
         let raw_err: AstNodeWrapper<K, Unchecked, Sy> = self.rebind();
-        <K::View<HasErrors> as View>::from_raw(cstree::util::NodeOrToken::Node(raw_err.0))
+        <K::View<HasErrors> as View>::from_raw_node(raw_err.0)
     }
 }
 

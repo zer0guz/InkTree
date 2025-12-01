@@ -703,6 +703,8 @@ impl Ast {
             .map(|(name, shape)| {
                 let ast_name = format_ident!("{}Ast", name);
                 let ast_enum = format_ident!("{}AstEnum", name);
+                
+
 
                 match shape {
                     Shape::Pratt {
@@ -712,9 +714,11 @@ impl Ast {
                         postfix_ops,
                     } => {
                         let atom_ast_name = format_ident!("{}AtomAst", name);
+                        let atom_ast_enum_name = format_ident!("{}AtomAstEnum", name);
+                        let mut atom_name = format_ident!("{}Atom", name);
                         let atom_ast = match atom {
                             Item::Named(ident) => {
-                                if let SyntaxAttribute::Rule(rule) = &language.element_by_name(ident).attribute {
+                                if let SyntaxAttribute::Rule(_rule) = &language.element_by_name(ident).attribute {
                                     todo!("aaah rule as pratt atom")
                                 };
                                 quote! {}
@@ -722,8 +726,8 @@ impl Ast {
                             Item::Inline(inner_shape) => match inner_shape.as_ref() {
                                 Shape::Struct { members: _ } => todo!("struct"),
                                 Shape::Enum { members } => {
-                                    let marker_name = format_ident!("{}AtomMarker", name);
-                                    let atom_ast_enum_name = format_ident!("{}AtomAstEnum", name);
+                                    atom_name = format_ident!("{}AtomMarker", name);
+
                                     let enum_variants = members.iter().map(|m| {
                                         let name = &m.label;
                                         use SyntaxAttribute::*;
@@ -734,10 +738,10 @@ impl Ast {
 
                                         quote! {#name:#ty}
                                     });
-                                    eprintln!("{:#?}",enum_variants);
 
                                     quote! {
-                                        ::inktree::ast_node_anon_enum!(#lang_ident::#marker_name(#( #enum_variants| )*) => #atom_ast_name,#atom_ast_enum_name);
+                                        ::inktree::ast_node_anon_enum!(#lang_ident::#atom_name(#( #enum_variants| )*) => #atom_ast_name,#atom_ast_enum_name);
+
                                     }
                                 }
                                 _ => unreachable!("inline shape cant be token/pratt"),
@@ -748,18 +752,91 @@ impl Ast {
                         let prefix_expr = format_ident!("{}Prefix", name);
                         let infix_expr = format_ident!("{}Infix", name);
 
+                        let has_prefix = !prefix_ops.is_empty();
+                        let has_infix  = !infix_ops.is_empty();
+
+                        // Variants for PrefixOp enum
                         let prefix_variants = prefix_ops.iter().map(|op| {
-                            let v = format_ident!("{}Ast", op);
-                            let t = format_ident!("{}Ast", op);
-                            quote! { #v(#t<S>) }
+                            let variant = format_ident!("{}Ast", op); // e.g. PlusAst
+                            let ty      = format_ident!("{}Ast", op); // payload type: PlusAst<S>
+                            quote! { #variant(#ty<S>) }
                         });
 
+                        // Variants for InfixOp enum
                         let infix_variants = infix_ops.iter().map(|op| {
-                            let v = format_ident!("{}Ast", op);
-                            let t = format_ident!("{}Ast", op);
-                            quote! { #v(#t<S>) }
+                            let variant = format_ident!("{}Ast", op);
+                            let ty      = format_ident!("{}Ast", op);
+                            quote! { #variant(#ty<S>) }
                         });
 
+                        // match arms for prefix operators
+                        let prefix_op_match_arms = prefix_ops.iter().map(|op| {
+                            let lang_kind   = op;                         // TestLang::Plus
+                            let variant     = format_ident!("{}Ast", op); // ExprPrefixOp::PlusAst
+                            quote! {
+                                #lang_ident::#lang_kind => #prefix_op_ty::#variant(op_token.clone().into())
+                            }
+                        });
+
+                        // match arms for infix operators
+                        let infix_op_match_arms = infix_ops.iter().map(|op| {
+                            let lang_kind   = op;
+                            let variant     = format_ident!("{}Ast", op);
+                            quote! {
+                                #lang_ident::#lang_kind => #infix_op_ty::#variant(op_token.clone().into())
+                            }
+                        });
+
+                        let prefix_defs = if has_prefix {
+                            quote! {
+                                /// Operator enum for prefix expressions inside this Pratt node.
+                                #[derive(Debug)]
+                                pub enum #prefix_op_ty<S> {
+                                    #( #prefix_variants, )*
+                                }
+
+                                /// Prefix expression payload for this Pratt node.
+                                #[derive(Debug)]
+                                pub struct #prefix_expr<S: ::inktree::State> {
+                                    pub op: #prefix_op_ty<S>,
+                                    pub rhs: #ast_name<S>,
+                                }
+                            }
+                        } else {
+                            quote! {}
+                        };
+
+                        let infix_defs = if has_infix {
+                            quote! {
+                                /// Operator enum for infix expressions inside this Pratt node.
+                                #[derive(Debug)]
+                                pub enum #infix_op_ty<S> {
+                                    #( #infix_variants, )*
+                                }
+
+                                /// Infix expression payload for this Pratt node.
+                                #[derive(Debug)]
+                                pub struct #infix_expr<S: ::inktree::State> {
+                                    pub lhs: #ast_name<S>,
+                                    pub op:  #infix_op_ty<S>,
+                                    pub rhs: #ast_name<S>,
+                                }
+                            }
+                        } else {
+                            quote! {}
+                        };
+
+                        let ast_enum_prefix_variant = if has_prefix {
+                            quote! { Prefix(#prefix_expr<S>), }
+                        } else {
+                            quote! {}
+                        };
+
+                        let ast_enum_infix_variant = if has_infix {
+                            quote! { Infix(#infix_expr<S>), }
+                        } else {
+                            quote! {}
+                        };
                         // (Postfix support can be added the same way if you decide to surface it:
                         //   enum <Name>PostfixOp<S> { ... } and a <Name>PostfixExpr<S> struct)
                         let _postfix_unused = postfix_ops; // keep lints quiet until you surface it
@@ -769,31 +846,81 @@ impl Ast {
 
                             ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name,#ast_enum);
 
-                            /// Operator enum for prefix expressions inside this Pratt node.
+                            
                             #[derive(Debug)]
-                            pub enum #prefix_op_ty<S> {
-                                #( #prefix_variants, )*
+                            pub enum #ast_enum<S: inktree::State> {
+                                Atom(::inktree::AstNodeWrapper<#atom_name, S, #lang_ident>),
+                                #ast_enum_prefix_variant
+                                #ast_enum_infix_variant
                             }
 
-                            /// Operator enum for infix expressions inside this Pratt node.
-                            #[derive(Debug)]
-                            pub enum #infix_op_ty<S> {
-                                #( #infix_variants, )*
-                            }
+                            #prefix_defs
+                            #infix_defs
 
-                            /// Prefix expression payload for this Pratt node.
-                            #[derive(Debug)]
-                            pub struct #prefix_expr<S: ::inktree::State> {
-                                pub op: #prefix_op_ty<S>,
-                                pub rhs: #ast_name<S>,
-                            }
+                            impl<S: ::inktree::State> ::inktree::View for #ast_enum<S> {
+                                type Kind = #name;
+                                type State = S;
 
-                            /// Infix expression payload for this Pratt node.
-                            #[derive(Debug)]
-                            pub struct #infix_expr<S: ::inktree::State> {
-                                pub lhs: #ast_name<S>,
-                                pub op:  #infix_op_ty<S>,
-                                pub rhs: #ast_name<S>,
+                                fn from_raw_token(raw: ::inktree::SyntaxToken<<Self::Kind as ::inktree::Kind>::Syntax>) -> Self {
+                                    unreachable!()
+                                }
+
+                                fn from_raw_node(raw: ::inktree::SyntaxNode<<Self::Kind as ::inktree::Kind>::Syntax>) -> Self {
+                                    let mut parts = raw.children_with_tokens();
+                                    let arity = raw.arity();
+
+                                    if arity == 3 {
+                                        let (lhs, op, rhs) = parts.collect_tuple().unwrap();
+                                        let op_token = op
+                                            .into_token()
+                                            .expect("second place  of infix node was not a token");
+                                        Self::Infix(#infix_expr {
+                                            lhs: lhs
+                                                .into_node()
+                                                .expect("lhs of infix node was a token")
+                                                .clone()
+                                                .into(),
+                                            op: match op_token.kind() {
+                                                #( #infix_op_match_arms, )*
+                                                _ => unreachable!("unknown infix operator kind for this Pratt node"),
+                                            },
+                                            rhs: rhs
+                                                .into_node()
+                                                .expect("rhs of infix node was a token")
+                                                .clone()
+                                                .into(),
+                                        })
+                                    } else if arity == 2 {
+                                        let next = parts.next().unwrap();
+                                        match next.into_token() {
+                                            Some(op_token) => Self::Prefix(#prefix_expr {
+                                                op: match op_token.kind() {
+                                                    #( #prefix_op_match_arms, )*
+                                                    _ => unreachable!("unknown prefix operator kind for this Pratt node"),
+                                                },
+                                                rhs: parts
+                                                    .next()
+                                                    .expect("invalid pratt infix node")
+                                                    .into_node()
+                                                    .expect("rhs of infix node was a token")
+                                                    .clone()
+                                                    .into(),
+                                            }),
+                                            None => unreachable!(),
+                                        }
+                                    } else {
+                                        debug_assert!(arity == 1);
+                                        Self::Atom(
+                                            parts
+                                                .next()
+                                                .expect("invalid pratt infix node")
+                                                .into_node()
+                                                .expect("rhs of infix node was a token")
+                                                .clone()
+                                                .into(),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -819,7 +946,7 @@ impl Ast {
                                     Cardinality::Optional => (),
                                     Cardinality::Repeated => todo!(),
                                 },
-                                Item::Inline(shape) => todo!("fix me pls here"),
+                                Item::Inline(_shape) => todo!("fix me pls here"),
                             }
                         }
 
@@ -856,40 +983,18 @@ impl Ast {
                                 }
                             }
                         });
-
-                        // match self.kind() {
-                        //   TestLang::KwPub => NameAstEnum::KwPub(token(self.syntax()).expect(...)),
-                        //   TestLang::FooNode => NameAstEnum::Foo(child(self.syntax()).expect(...)),
-                        //   ...
-                        // }
                         let match_arms = members.iter().map(|m| {
-                            let variant_label = &m.label;
-                            match &m.item {
-                                Item::Named(underlying) => {
-                                    let kind_ident = underlying; // syntax kind in TestLang
-                                    if self.tokens.contains(underlying) {
-                                        // Variant backed by a *token*
-                                        quote! {
-                                            #lang_ident::#kind_ident => #enum_name::#variant_label(
-                                                ::inktree::token(raw.syntax())
-                                                    .expect("enum nodes should always be structurally valid"),
-                                            )
-                                        }
-                                    } else {
-                                        // Variant backed by a *node*
-                                        quote! {
-                                            #lang_ident::#kind_ident => #enum_name::#variant_label(
-                                                ::inktree::child(raw.syntax())
-                                                    .expect("enum nodes should always be structurally valid"),
-                                            )
-                                        }
-                                    }
-                                }
-                                Item::Inline(_) => {
-                                    panic!("inline enum variants are not yet supported in inktree AST codegen");
-                                }
-                            }
+                            let name = &m.label;
+                            use SyntaxAttribute::*;
+                            let ty = match language.element_by_name(name).attribute {
+                                StaticToken(_) | Token(_) => quote! {Token},
+                                _ => quote! {Node},
+                            };
+
+                            quote! {#name:#ty}
                         });
+
+
                         quote! {
                             ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name, #enum_name);
 
@@ -898,23 +1003,7 @@ impl Ast {
                                 #( #enum_variants, )*
                             }
 
-                            // impl<S: ::inktree::State> ::inktree::View for #enum_name<S> {
-                            //     type Kind = #name;
-
-                            //     type State = S;
-                            //     fn from_raw(
-                            //         raw: inktree::cstree::prelude::SyntaxElement<
-                            //             <Self::Kind as Kind>::Syntax,
-                            //             inktree::ParseError,
-                            //         >,
-                            //     ) -> Self {
-                            //         let raw = raw.as_
-                            //         match raw.kind() {
-                            //             #( #match_arms, )*
-                            //             _ => unreachable!("enum nodes should always be structurally valid"),
-                            //         }
-                            //     }
-                            // }
+                            ::inktree::enum_view_impl!(#lang_ident::#name(#( #match_arms| )*) for #enum_name);
                         }
                     }
                 }
