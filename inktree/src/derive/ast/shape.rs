@@ -983,27 +983,73 @@ impl Ast {
                                 }
                             }
                         });
-                        let match_arms = members.iter().map(|m| {
-                            let name = &m.label;
+                        let token_arms = members.iter().filter_map(|m| {
+                            let variant = &m.label;
                             use SyntaxAttribute::*;
-                            let ty = match language.element_by_name(name).attribute {
-                                StaticToken(_) | Token(_) => quote! {Token},
-                                _ => quote! {Node},
-                            };
 
-                            quote! {#name:#ty}
+                            match language.element_by_name(variant).attribute {
+                                StaticToken(_) | Token(_) => Some(quote! {
+                                    #lang_ident::#variant => Self::#variant(tok.clone().into())
+                                }),
+                                _ => None,
+                            }
                         });
 
+                        let node_arms = members.iter().filter_map(|m| {
+                            let variant = &m.label;
+                            use SyntaxAttribute::*;
+
+                            match language.element_by_name(variant).attribute {
+                                StaticToken(_) | Token(_) => None,
+                                _ => Some(quote! {
+                                    #lang_ident::#variant => Self::#variant(node.clone().into())
+                                }),
+                            }
+                        });
 
                         quote! {
                             ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name, #enum_name);
 
                             /// View enum for the `#name` AST node.
-                            pub enum #enum_name<S> {
+                            pub enum #enum_name<S: inktree::State> {
                                 #( #enum_variants, )*
                             }
 
-                            ::inktree::enum_view_impl!(#lang_ident::#name(#( #match_arms| )*) for #enum_name);
+                            impl<S: inktree::State> inktree::View for #enum_name<S> {
+                                type Kind = #name;
+                                type State = S;
+
+                                fn from_raw_token(
+                                    _raw: inktree::SyntaxToken<<Self::Kind as inktree::Kind>::Syntax>
+                                ) -> Self {
+                                    unreachable!(concat!(stringify!(#name), " is always a node"));
+                                }
+
+                                fn from_raw_node(
+                                    raw: inktree::SyntaxNode<<Self::Kind as inktree::Kind>::Syntax>
+                                ) -> Self {
+                                    use inktree::cstree::util::NodeOrToken;
+
+                                    let first = raw
+                                        .first_child_or_token()
+                                        .expect("enum node only constructed if structurally valid");
+
+                                    match first {
+                                        NodeOrToken::Token(tok) => {
+                                            match tok.kind() {
+                                                #( #token_arms, )*
+                                                _ => unreachable!("enum node token child kind not covered"),
+                                            }
+                                        }
+                                        NodeOrToken::Node(node) => {
+                                            match node.kind() {
+                                                #( #node_arms, )*
+                                                _ => unreachable!("enum node child kind not covered"),
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

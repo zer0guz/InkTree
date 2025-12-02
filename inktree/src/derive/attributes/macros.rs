@@ -245,7 +245,11 @@ macro_rules! define_pratt_ext {
 
                         // no prefix matched: rewind and parse atom
                         inp.rewind(inp_cp);
-                        break 'nud inp.parse(&atom.clone().with_cp())?;
+                        let atom_cp = inp.parse(&atom.clone().with_cp())?;
+                        let builder = inp.state();
+                        builder.start_node_at(atom_cp, kind);
+                        builder.finish_node();
+                        break 'nud atom_cp;
                     };
 
                     // LED: postfix + infix climbing loop
@@ -294,13 +298,10 @@ macro_rules! define_pratt_ext {
                 }
 
                 let cp =  inp.state().checkpoint();
-                let _root_cp = go(inp, &self.atom, self.kind, 0)?;
-                let builder = inp.state();
-                builder.start_node_at(cp, self.kind);
-                builder.finish_node();
-
+                go(inp, &self.atom, self.kind, 0)?;
 
                 Ok(())
+                
             }
         }
     };
