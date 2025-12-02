@@ -45,21 +45,17 @@ impl FromMeta for Node {
 
 impl LanguageElement for Node {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
-        let name = &self.name();
-        let lang_ident = &language.ident;
+        let lang_name = &language.ident;
+        let name = self.name();
+        let base_body = self.0.parser_body(language);
+        let node = quote! {
+            #base_body.as_node(#lang_name::#name)
+        };
+        let code = self.0.parser(node, language, true);
 
-        let code = self.0.parser_body(language);
-
-        // let ast_defs: Vec<TokenStream> = shapes
-        //     .into_iter()
-        //     .map(|shape| shape.codegen(lang_ident,name))
-        //     .collect();
-
-        Ok(quote! {
-            ::inktree::node!(#lang_ident::#name,{#code});
-            //#(#ast_defs)*
-
-        })
+        Ok(
+            code, 
+        )
     }
 
     fn allowed(&self) -> &'static [PropertyKind] {

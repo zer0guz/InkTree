@@ -5,11 +5,11 @@ use syn::{Ident, MetaList};
 use crate::{
     LowerCtx, Shape,
     derive::{
-        attributes::{Node, allowed::ALLOWED_PRATT},
-        parser::FromMeta,
+        attributes::{Node, SyntaxAttribute, allowed::ALLOWED_PRATT},
+        parser::{DslExpr, FromMeta},
         properties::{Property, PropertyKind},
     },
-    language::{ElementError, Language, LanguageElement},
+    language::{Element, ElementError, Language, LanguageElement},
 };
 
 #[derive(Debug)]
@@ -37,6 +37,13 @@ impl FromMeta for Pratt {
     fn from_list(list: &MetaList, name: Option<&Ident>) -> Result<Self, ElementError> {
         let input = list.tokens.to_string();
         let node = Node::from_string(input, name.expect("asdasd"))?;
+        let DslExpr::Just(_) = &node.0.dsl else {
+            return Err(syn::Error::new_spanned(
+                &list,
+                "pratt atom has to be exactly one other syntax element",
+            ))
+            .map_err(ElementError::from)?;
+        };
         Ok(Self { node })
     }
 }
@@ -63,6 +70,18 @@ impl LanguageElement for Pratt {
         properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {
+        if let DslExpr::Just(ident) = &self.node.0.dsl
+            && let Element {
+                attribute: _rule_attr @ SyntaxAttribute::Rule(_),
+                ..
+            } = language.element_by_name(ident)
+        {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "pratt atom cannot be a rule! it has to be its own CST node",
+            ))
+            .map_err(ElementError::from)?;
+        }
         self.node.build(properties, language)
     }
 

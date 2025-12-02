@@ -164,7 +164,7 @@ impl Rule {
                 quote! {
                     #[derive(Debug)]
                     pub struct #name_ident;
-                    inktree::parseable!(#lang_ident::#name_ident, [#(#param_idents),*],#body);
+                    inktree::parseable!(#lang_ident::#name_ident, [#(#param_idents),*],{#body});
                 }
             } else {
                 quote! {

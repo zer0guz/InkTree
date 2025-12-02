@@ -713,39 +713,41 @@ impl Ast {
                         infix_ops,
                         postfix_ops,
                     } => {
-                        let atom_ast_name = format_ident!("{}AtomAst", name);
-                        let atom_ast_enum_name = format_ident!("{}AtomAstEnum", name);
-                        let mut atom_name = format_ident!("{}Atom", name);
-                        let atom_ast = match atom {
+                        // let atom_ast_name = format_ident!("{}AtomAst", name);
+                        // let atom_ast_enum_name = format_ident!("{}AtomAstEnum", name);
+                        //let mut atom_name = format_ident!("{}Atom", name);
+
+                        let atom_name = match atom {
                             Item::Named(ident) => {
                                 if let SyntaxAttribute::Rule(_rule) = &language.element_by_name(ident).attribute {
-                                    todo!("aaah rule as pratt atom")
+                                    unreachable!("aaah rule as pratt atom")
                                 };
-                                quote! {}
-                            }
-                            Item::Inline(inner_shape) => match inner_shape.as_ref() {
-                                Shape::Struct { members: _ } => todo!("struct"),
-                                Shape::Enum { members } => {
-                                    atom_name = format_ident!("{}AtomMarker", name);
-
-                                    let enum_variants = members.iter().map(|m| {
-                                        let name = &m.label;
-                                        use SyntaxAttribute::*;
-                                        let ty = match language.element_by_name(name).attribute {
-                                            StaticToken(_) | Token(_) => quote! {Token},
-                                            _ => quote! {Node},
-                                        };
-
-                                        quote! {#name:#ty}
-                                    });
-
-                                    quote! {
-                                        ::inktree::ast_node_anon_enum!(#lang_ident::#atom_name(#( #enum_variants| )*) => #atom_ast_name,#atom_ast_enum_name);
-
-                                    }
-                                }
-                                _ => unreachable!("inline shape cant be token/pratt"),
+                                ident
                             },
+                            // Item::Inline(inner_shape) => match inner_shape.as_ref() {
+                            //     Shape::Struct { members: _ } => todo!("struct"),
+                            //     Shape::Enum { members } => {
+                            //         atom_name = format_ident!("{}AtomMarker", name);
+
+                            //         let enum_variants = members.iter().map(|m| {
+                            //             let name = &m.label;
+                            //             use SyntaxAttribute::*;
+                            //             let ty = match language.element_by_name(name).attribute {
+                            //                 StaticToken(_) | Token(_) => quote! {Token},
+                            //                 _ => quote! {Node},
+                            //             };
+
+                            //             quote! {#name:#ty}
+                            //         });
+
+                            //         quote! {
+                            //             ::inktree::ast_node_anon_enum!(#lang_ident::#atom_name(#( #enum_variants| )*) => #atom_ast_name,#atom_ast_enum_name);
+
+                            //         }
+                            //     }
+                            //     _ => unreachable!("inline shape cant be token/pratt"),
+                            // },
+                             _=> unreachable!("pratt has to be a single namend language element")
                         };
                         let prefix_op_ty = format_ident!("{}PrefixOp", name);
                         let infix_op_ty = format_ident!("{}InfixOp", name);
@@ -842,7 +844,7 @@ impl Ast {
                         let _postfix_unused = postfix_ops; // keep lints quiet until you surface it
 
                         quote! {
-                            #atom_ast
+                            //#atom_ast
 
                             ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name,#ast_enum);
 
@@ -967,6 +969,8 @@ impl Ast {
                     Shape::Token(_) => unreachable!("tokens are stored seperatly"),
                     Shape::Enum { members } => {
                         let enum_name = format_ident!("{}AstEnum", name);
+
+                        // Enum payload types: Variant(FooAst<S>)
                         let enum_variants = members.iter().map(|m| {
                             let variant_label = &m.label; // deduped label (A, A2, KwPub, ...)
                             match &m.item {
@@ -977,35 +981,66 @@ impl Ast {
                                     }
                                 }
                                 Item::Inline(inline) => {
-                                    eprintln!("Shape: {:#?}",shape);
-                                    eprintln!("Inline: {:#?}",inline);
+                                    eprintln!("Shape: {:#?}", shape);
+                                    eprintln!("Inline: {:#?}", inline);
                                     panic!("inline enum variants are not yet supported in inktree AST codegen!!!");
                                 }
                             }
                         });
-                        let token_arms = members.iter().filter_map(|m| {
-                            let variant = &m.label;
+
+                        // Generate one `if let` arm per member, using `token::<...>()` or `child::<...>()`
+                        let mut match_arms = Vec::new();
+                        for (i, m) in members.iter().enumerate() {
+                            let variant_label = &m.label;
+
+                            let underlying = match &m.item {
+                                Item::Named(u) => u,
+                                Item::Inline(_) => unreachable!(),
+                            };
+
+                            let payload_ty = format_ident!("{}Ast", underlying);
+
+                            // IMPORTANT: use the *underlying* element name to look up the attribute
+                            let elem = language.element_by_name(underlying);
                             use SyntaxAttribute::*;
 
-                            match language.element_by_name(variant).attribute {
-                                StaticToken(_) | Token(_) => Some(quote! {
-                                    #lang_ident::#variant => Self::#variant(tok.clone().into())
-                                }),
-                                _ => None,
-                            }
-                        });
+                            let arm = match elem.attribute {
+                                StaticToken(_) | Token(_) => {
+                                    // Variant wraps a token → use `token::<PayloadAst<S>>`
+                                    if i == 0 {
+                                        quote! {
+                                            if let Some(v) = ::inktree::token::<#payload_ty<S>>(&raw) {
+                                                Self::#variant_label(v)
+                                            }
+                                        }
+                                    } else {
+                                        quote! {
+                                            else if let Some(v) = ::inktree::token::<#payload_ty<S>>(&raw) {
+                                                Self::#variant_label(v)
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    // Variant wraps a node → use `child::<PayloadAst<S>>`
+                                    if i == 0 {
+                                        quote! {
+                                            if let Some(v) = ::inktree::child::<#payload_ty<S>>(&raw) {
+                                                Self::#variant_label(v)
+                                            }
+                                        }
+                                    } else {
+                                        quote! {
+                                            else if let Some(v) = ::inktree::child::<#payload_ty<S>>(&raw) {
+                                                Self::#variant_label(v)
+                                            }
+                                        }
+                                    }
+                                }
+                            };
 
-                        let node_arms = members.iter().filter_map(|m| {
-                            let variant = &m.label;
-                            use SyntaxAttribute::*;
-
-                            match language.element_by_name(variant).attribute {
-                                StaticToken(_) | Token(_) => None,
-                                _ => Some(quote! {
-                                    #lang_ident::#variant => Self::#variant(node.clone().into())
-                                }),
-                            }
-                        });
+                            match_arms.push(arm);
+                        }
 
                         quote! {
                             ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name, #enum_name);
@@ -1020,38 +1055,23 @@ impl Ast {
                                 type State = S;
 
                                 fn from_raw_token(
-                                    _raw: inktree::SyntaxToken<<Self::Kind as inktree::Kind>::Syntax>
+                                    _raw: inktree::SyntaxToken<<Self::Kind as inktree::Kind>::Syntax>,
                                 ) -> Self {
                                     unreachable!(concat!(stringify!(#name), " is always a node"));
                                 }
 
                                 fn from_raw_node(
-                                    raw: inktree::SyntaxNode<<Self::Kind as inktree::Kind>::Syntax>
+                                    raw: inktree::SyntaxNode<<Self::Kind as inktree::Kind>::Syntax>,
                                 ) -> Self {
-                                    use inktree::cstree::util::NodeOrToken;
-
-                                    let first = raw
-                                        .first_child_or_token()
-                                        .expect("enum node only constructed if structurally valid");
-
-                                    match first {
-                                        NodeOrToken::Token(tok) => {
-                                            match tok.kind() {
-                                                #( #token_arms, )*
-                                                _ => unreachable!("enum node token child kind not covered"),
-                                            }
-                                        }
-                                        NodeOrToken::Node(node) => {
-                                            match node.kind() {
-                                                #( #node_arms, )*
-                                                _ => unreachable!("enum node child kind not covered"),
-                                            }
-                                        }
+                                    #( #match_arms )*
+                                    else {
+                                        unreachable!("enum node only constructed if structurally valid");
                                     }
                                 }
                             }
                         }
                     }
+
                 }
             })
             .collect()
