@@ -4,7 +4,7 @@ use crate::{
     language::rule_graph::{RecursionInfo, RuleGraph},
     util::{Handle, Pool},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use proc_macro2::TokenStream;
 use snafu::{ResultExt, Snafu};
@@ -58,6 +58,7 @@ pub(crate) struct Language {
     pub recursion_info: Option<RecursionInfo>,
     pub extras: Vec<Ident>,
     pub idents: HashMap<Ident, Handle<Element>>,
+    pub ast_relevant: HashSet<Ident>,
 }
 
 impl Language {
@@ -70,15 +71,17 @@ impl Language {
         return Ok(());
     }
 
-    pub(crate) fn element_by_name(&self,name: &Ident) -> &Element {
-        let handle = self.idents.get(name).expect("verified lang ident not in idents");
+    pub(crate) fn element_by_name(&self, name: &Ident) -> &Element {
+        let handle = self
+            .idents
+            .get(name)
+            .expect("verified lang ident not in idents");
 
         &self.element_pool[*handle]
-
     }
 
     fn syntax_impl(&self) -> TokenStream {
-        let (static_texts, parsers): (Vec<_>, Vec<_>) = self
+        let (static_texts, parsers, relevant): (Vec<_>, Vec<_>, Vec<_>) = self
             .element_pool
             .iter()
             .filter(|element| element.attribute.discriminant() != SyntaxAttributeKind::Rule)
@@ -91,15 +94,21 @@ impl Language {
                             #ident => Some(#text),
                         }
                     }
-                    _ => quote! {
-                        #ident => None,
-                    },
+                    _ => quote! {},
                 };
                 let lang_ident = &self.ident;
                 let parser = quote! {
                     #lang_ident::#ident => #ident::parser().boxed(),
                 };
-                (static_text, parser)
+                let relevant = if self.ast_relevant.contains(variant.attribute.name()) {
+                    quote! {
+                        #lang_ident::#ident => true,
+                    }
+                } else {
+                    quote! {}
+                };
+
+                (static_text, parser, relevant)
             })
             .collect();
         let ident = &self.ident;
@@ -138,7 +147,7 @@ impl Language {
                     use #ident::*;
                     match self {
                         #( #static_texts )*
-                        _ => unreachable!()
+                        _ => None
                     }
                 }
 
@@ -157,6 +166,13 @@ impl Language {
                     use ::inktree::Parseable;
                     match self {
                         #( #parsers )*
+                    }
+                }
+
+                fn is_ast_relevant(&self) -> bool {
+                    match self {
+                        #( #relevant )*
+                        _ => false
                     }
                 }
             }
@@ -199,7 +215,6 @@ impl Language {
             });
         }
 
-        stream.extend(self.syntax_impl());
 
         let variants_code = self
             .element_pool
@@ -212,6 +227,9 @@ impl Language {
         stream.extend(self.pratt_codegen());
 
         stream.extend(self.ast_codegen());
+
+        stream.extend(self.syntax_impl());
+
 
         Ok(stream)
     }
@@ -266,6 +284,7 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
         recursion_info: None,
         idents: HashMap::new(),
         extras: vec![],
+        ast_relevant: HashSet::new(),
     };
 
     let mut repr = vec![];

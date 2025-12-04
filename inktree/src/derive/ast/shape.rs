@@ -581,7 +581,7 @@ pub struct Ast {
     pub anon_shapes: HashMap<Ident, Shape>,
 }
 impl Ast {
-    pub(crate) fn build_from_root(lang: &Language, root: &Ident) -> Ast {
+    pub(crate) fn build_from_root(lang: &mut Language, root: &Ident) -> Ast {
         fn fmt_ident_list(xs: &[Ident]) -> String {
             if xs.is_empty() {
                 return "[]".to_string();
@@ -602,9 +602,9 @@ impl Ast {
         eprintln!("┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
         let mut out = Ast::default();
-        let mut work: Vec<Ident> = vec![root.clone()];
+        let mut work = vec![root.clone()];
         let mut seen = std::collections::HashSet::<Ident>::new();
-        let mut step: usize = 0;
+        let mut step = 0;
 
         while let Some(name) = work.pop() {
             step += 1;
@@ -669,7 +669,7 @@ impl Ast {
             out.tokens.len()
         );
         eprintln!("┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
+        lang.ast_relevant = seen;
         out
     }
 
@@ -776,7 +776,7 @@ impl Ast {
                             let lang_kind   = op;                         // TestLang::Plus
                             let variant     = format_ident!("{}Ast", op); // ExprPrefixOp::PlusAst
                             quote! {
-                                #lang_ident::#lang_kind => #prefix_op_ty::#variant(op_token.clone().into())
+                                #lang_ident::#lang_kind => #prefix_op_ty::#variant(first.clone().into())
                             }
                         });
 
@@ -785,7 +785,7 @@ impl Ast {
                             let lang_kind   = op;
                             let variant     = format_ident!("{}Ast", op);
                             quote! {
-                                #lang_ident::#lang_kind => #infix_op_ty::#variant(op_token.clone().into())
+                                #lang_ident::#lang_kind => #infix_op_ty::#variant(second.clone().into())
                             }
                         });
 
@@ -863,64 +863,49 @@ impl Ast {
                                 type Kind = #name;
                                 type State = S;
 
-                                fn from_raw_token(raw: ::inktree::SyntaxToken<<Self::Kind as ::inktree::Kind>::Syntax>) -> Self {
+                                fn from_raw_token(_raw: ::inktree::SyntaxToken<<Self::Kind as ::inktree::Kind>::Syntax>) -> Self {
                                     unreachable!()
                                 }
-
                                 fn from_raw_node(raw: ::inktree::SyntaxNode<<Self::Kind as ::inktree::Kind>::Syntax>) -> Self {
-                                    let mut parts = raw.children_with_tokens();
-                                    let arity = raw.arity();
+                                    use ::inktree::cstree::util::NodeOrToken::*;
+                                    let mut parts = ::inktree::significant_children_with_token(&raw);
+                                    let first = parts
+                                        .next()
+                                        .expect("pratt node has to have atleast one child");
 
-                                    if arity == 3 {
-                                        let (lhs, op, rhs) = parts.collect_tuple().unwrap();
-                                        let op_token = op
-                                            .into_token()
-                                            .expect("second place  of infix node was not a token");
-                                        Self::Infix(#infix_expr {
-                                            lhs: lhs
-                                                .into_node()
-                                                .expect("lhs of infix node was a token")
-                                                .clone()
-                                                .into(),
-                                            op: match op_token.kind() {
-                                                #( #infix_op_match_arms, )*
-                                                _ => unreachable!("unknown infix operator kind for this Pratt node"),
-                                            },
-                                            rhs: rhs
-                                                .into_node()
-                                                .expect("rhs of infix node was a token")
-                                                .clone()
-                                                .into(),
-                                        })
-                                    } else if arity == 2 {
-                                        let next = parts.next().unwrap();
-                                        match next.into_token() {
-                                            Some(op_token) => Self::Prefix(#prefix_expr {
-                                                op: match op_token.kind() {
-                                                    #( #prefix_op_match_arms, )*
-                                                    _ => unreachable!("unknown prefix operator kind for this Pratt node"),
+                                    match first {
+                                        Node(first) => {
+                                            match parts.next() {
+                                                Some(Token(second)) => match parts.next() {
+                                                    Some(Node(third)) => Self::Infix(#infix_expr {
+                                                        lhs: first.clone().into(),
+                                                        op: match second.kind() {
+                                                            #( #infix_op_match_arms, )*
+                                                            _ => unreachable!("unknown infix operator kind for this Pratt node"),
+                                                        },
+                                                        rhs: third.clone().into(),
+                                                    }),
+                                                    None => unreachable!("no postfix operator for this pratt node"),
+                                                    _ => unreachable!(),
                                                 },
-                                                rhs: parts
-                                                    .next()
-                                                    .expect("invalid pratt infix node")
-                                                    .into_node()
-                                                    .expect("rhs of infix node was a token")
-                                                    .clone()
-                                                    .into(),
-                                            }),
-                                            None => unreachable!(),
+                                                None => Self::Atom(first.clone().into()),
+                                                _ => unreachable!(),
+                                            }
                                         }
-                                    } else {
-                                        debug_assert!(arity == 1);
-                                        Self::Atom(
-                                            parts
+                                        Token(first) => Self::Prefix(#prefix_expr {
+                                            op: match first.kind() {
+                                                #( #prefix_op_match_arms, )*
+                                                _ => unreachable!("unknown prefix operator kind for this Pratt node"),
+
+                                            },
+                                            rhs: parts
                                                 .next()
-                                                .expect("invalid pratt infix node")
+                                                .expect("invalid pratt node: found a single operator wihtout atom")
                                                 .into_node()
-                                                .expect("rhs of infix node was a token")
+                                                .expect("invalid pratt node: found operator and second child wasnt a node")
                                                 .clone()
                                                 .into(),
-                                        )
+                                        }),
                                     }
                                 }
                             }
@@ -1189,6 +1174,7 @@ mod tests {
             recursion_info: None,
             extras: vec![],
             idents: HashMap::new(),
+            ast_relevant: HashSet::new(),
         }
     }
 

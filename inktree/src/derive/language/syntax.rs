@@ -17,4 +17,6 @@ pub trait Syntax: cstree::Syntax + 'static {
         'borrow: 'interner,
         'src: 'extra,
         'cache: 'extra;
+
+    fn is_ast_relevant(&self) -> bool;
 }

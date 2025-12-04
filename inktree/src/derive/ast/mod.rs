@@ -2,7 +2,7 @@ mod macros;
 mod shape;
 mod state;
 
-use cstree::{interning::Resolver};
+use cstree::{interning::Resolver, util::NodeOrToken};
 pub use shape::*;
 pub use state::*;
 
@@ -113,11 +113,11 @@ where
 {
     type Kind = K;
     type State = S;
-    
+
     fn from_raw_token(_raw: SyntaxToken<<Self::Kind as Kind>::Syntax>) -> Self {
         unreachable!()
     }
-    
+
     fn from_raw_node(raw: SyntaxNode<<Self::Kind as Kind>::Syntax>) -> Self {
         raw.into()
     }
@@ -179,7 +179,24 @@ pub fn child<N>(parent: &SyntaxNode<<N::Kind as Kind>::Syntax>) -> Option<N>
 where
     N: AstNode,
 {
-    parent.children().find_map(N::cast)
+    significant_children(parent).find_map(N::cast)
+}
+
+#[inline]
+pub fn significant_children_with_token<Sy: Syntax>(
+    parent: &SyntaxNode<Sy>,
+) -> impl Iterator<Item = NodeOrToken<&SyntaxNode<Sy>,& SyntaxToken<Sy>>> {
+    parent
+        .children_with_tokens()
+        .filter(|el| el.kind().is_ast_relevant())
+}
+#[inline]
+pub fn significant_children<Sy: Syntax>(
+    parent: &SyntaxNode<Sy>,
+) -> impl Iterator<Item = &SyntaxNode<Sy>> {
+    parent
+        .children()
+        .filter(|el| el.kind().is_ast_relevant())
 }
 
 #[inline]
@@ -187,8 +204,7 @@ pub fn token<T>(parent: &SyntaxNode<<T::Kind as Kind>::Syntax>) -> Option<T>
 where
     T: AstToken,
 {
-    parent
-        .children_with_tokens()
+    significant_children_with_token(parent)
         .filter_map(|it| it.into_token())
         .find_map(T::cast)
 }

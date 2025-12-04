@@ -79,7 +79,7 @@ where
     Sy: Syntax,
 {
     unsafe fn assume_verified(self) -> K::View<Verified> {
-        let raw_verified: AstNodeWrapper<K, Unchecked, Sy> = self.rebind();
+        let raw_verified: AstNodeWrapper<_, Verified, _> = self.rebind();
         <K::View<Verified> as View>::from_raw_node(raw_verified.0)
     }
 
