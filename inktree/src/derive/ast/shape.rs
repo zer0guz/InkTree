@@ -713,10 +713,6 @@ impl Ast {
                         infix_ops,
                         postfix_ops,
                     } => {
-                        // let atom_ast_name = format_ident!("{}AtomAst", name);
-                        // let atom_ast_enum_name = format_ident!("{}AtomAstEnum", name);
-                        //let mut atom_name = format_ident!("{}Atom", name);
-
                         let atom_name = match atom {
                             Item::Named(ident) => {
                                 if let SyntaxAttribute::Rule(_rule) = &language.element_by_name(ident).attribute {
@@ -751,11 +747,15 @@ impl Ast {
                         };
                         let prefix_op_ty = format_ident!("{}PrefixOp", name);
                         let infix_op_ty = format_ident!("{}InfixOp", name);
+                        let postfix_op_ty = format_ident!("{}PostfixOp", name);
                         let prefix_expr = format_ident!("{}Prefix", name);
                         let infix_expr = format_ident!("{}Infix", name);
+                        let postfix_expr  = format_ident!("{}Postfix", name);
 
                         let has_prefix = !prefix_ops.is_empty();
                         let has_infix  = !infix_ops.is_empty();
+                        let has_postfix = !postfix_ops.is_empty();
+
 
                         // Variants for PrefixOp enum
                         let prefix_variants = prefix_ops.iter().map(|op| {
@@ -768,6 +768,13 @@ impl Ast {
                         let infix_variants = infix_ops.iter().map(|op| {
                             let variant = format_ident!("{}Ast", op);
                             let ty      = format_ident!("{}Ast", op);
+                            quote! { #variant(#ty<S>) }
+                        });
+
+                        // Variants for PostfixOp enum
+                        let postfix_variants = postfix_ops.iter().map(|op| {
+                            let variant = format_ident!("{}Ast", op); // e.g. PlusAst
+                            let ty      = format_ident!("{}Ast", op); // payload type: PlusAst<S>
                             quote! { #variant(#ty<S>) }
                         });
 
@@ -786,6 +793,14 @@ impl Ast {
                             let variant     = format_ident!("{}Ast", op);
                             quote! {
                                 #lang_ident::#lang_kind => #infix_op_ty::#variant(second.clone().into())
+                            }
+                        });
+
+                        let postfix_op_match_arms = postfix_ops.iter().map(|op| {
+                            let lang_kind = op;                         // e.g. Plus
+                            let variant   = format_ident!("{}Ast", op); // PostfixOp::PlusAst
+                            quote! {
+                                #lang_ident::#lang_kind => #postfix_op_ty::#variant(second.clone().into())
                             }
                         });
 
@@ -828,6 +843,25 @@ impl Ast {
                             quote! {}
                         };
 
+                        let postfix_defs = if has_postfix {
+                            quote! {
+                                /// Operator enum for postfix expressions inside this Pratt node.
+                                #[derive(Debug)]
+                                pub enum #postfix_op_ty<S> {
+                                    #( #postfix_variants, )*
+                                }
+
+                                /// Postfix expression payload for this Pratt node.
+                                #[derive(Debug)]
+                                pub struct #postfix_expr<S: ::inktree::State> {
+                                    pub lhs: #ast_name<S>,
+                                    pub op:  #postfix_op_ty<S>,
+                                }
+                            }
+                        } else {
+                            quote! {}
+                        };
+
                         let ast_enum_prefix_variant = if has_prefix {
                             quote! { Prefix(#prefix_expr<S>), }
                         } else {
@@ -839,9 +873,67 @@ impl Ast {
                         } else {
                             quote! {}
                         };
-                        // (Postfix support can be added the same way if you decide to surface it:
-                        //   enum <Name>PostfixOp<S> { ... } and a <Name>PostfixExpr<S> struct)
-                        let _postfix_unused = postfix_ops; // keep lints quiet until you surface it
+
+                        let ast_enum_postfix_variant = if has_postfix {
+                            quote! { Postfix(#postfix_expr<S>), }
+                        } else {
+                            quote! {}
+                        };
+
+                        let prefix_expr_body = if has_prefix {
+                            quote! {
+                                Self::Prefix(#prefix_expr {
+                                    op: match first.kind() {
+                                        #( #prefix_op_match_arms, )*
+                                        _ => unreachable!("unknown prefix operator kind for this Pratt node"),
+                                    },
+                                    rhs: parts
+                                        .next()
+                                        .expect("invalid pratt node: found a single operator without atom")
+                                        .into_node()
+                                        .expect("invalid pratt node: found operator and second child wasn't a node")
+                                        .clone()
+                                        .into(),
+                                })
+                            }
+                        } else {
+                            quote! {
+                                unreachable!("prefix operators are not configured for this Pratt node")
+                            }
+                        };
+
+                        let infix_expr_body = if has_infix {
+                            quote! {
+                                Self::Infix(#infix_expr {
+                                    lhs: first.clone().into(),
+                                    op: match second.kind() {
+                                        #( #infix_op_match_arms, )*
+                                        _ => unreachable!("unknown infix operator kind for this Pratt node"),
+                                    },
+                                    rhs: third.clone().into(),
+                                })
+                            }
+                        } else {
+                            quote! {
+                                unreachable!("infix operators are not configured for this Pratt node")
+                            }
+                        };
+
+                        let postfix_expr_body = if has_postfix {
+                            quote! {
+                                Self::Postfix(#postfix_expr {
+                                    lhs: first.clone().into(),
+                                    op: match second.kind() {
+                                        #( #postfix_op_match_arms, )*
+                                        _ => unreachable!("unknown postfix operator kind for this Pratt node"),
+                                    },
+                                })
+                            }
+                        } else {
+                            quote! {
+                                unreachable!("postfix operators are not configured for this Pratt node")
+                            }
+                        };
 
                         quote! {
                             //#atom_ast
@@ -854,10 +946,13 @@ impl Ast {
                                 Atom(::inktree::AstNodeWrapper<#atom_name, S, #lang_ident>),
                                 #ast_enum_prefix_variant
                                 #ast_enum_infix_variant
+                                #ast_enum_postfix_variant
                             }
 
                             #prefix_defs
                             #infix_defs
+                            #postfix_defs
+
 
                             impl<S: ::inktree::State> ::inktree::View for #ast_enum<S> {
                                 type Kind = #name;
@@ -866,7 +961,9 @@ impl Ast {
                                 fn from_raw_token(_raw: ::inktree::SyntaxToken<<Self::Kind as ::inktree::Kind>::Syntax>) -> Self {
                                     unreachable!()
                                 }
-                                fn from_raw_node(raw: ::inktree::SyntaxNode<<Self::Kind as ::inktree::Kind>::Syntax>) -> Self {
+                                fn from_raw_node(
+                                    raw: ::inktree::SyntaxNode<<Self::Kind as ::inktree::Kind>::Syntax>,
+                                ) -> Self {
                                     use ::inktree::cstree::util::NodeOrToken::*;
                                     let mut parts = ::inktree::significant_children_with_token(&raw);
                                     let first = parts
@@ -877,35 +974,27 @@ impl Ast {
                                         Node(first) => {
                                             match parts.next() {
                                                 Some(Token(second)) => match parts.next() {
-                                                    Some(Node(third)) => Self::Infix(#infix_expr {
-                                                        lhs: first.clone().into(),
-                                                        op: match second.kind() {
-                                                            #( #infix_op_match_arms, )*
-                                                            _ => unreachable!("unknown infix operator kind for this Pratt node"),
-                                                        },
-                                                        rhs: third.clone().into(),
-                                                    }),
-                                                    None => unreachable!("no postfix operator for this pratt node"),
+                                                    Some(Node(third)) => {
+                                                        // lhs op rhs  => infix
+                                                        #infix_expr_body
+                                                    }
+                                                    None => {
+                                                        // lhs op  => postfix
+                                                        #postfix_expr_body
+                                                    }
                                                     _ => unreachable!(),
                                                 },
-                                                None => Self::Atom(first.clone().into()),
+                                                None => {
+                                                    // just nested Atom/Expr node
+                                                    Self::Atom(first.clone().into())
+                                                }
                                                 _ => unreachable!(),
                                             }
                                         }
-                                        Token(first) => Self::Prefix(#prefix_expr {
-                                            op: match first.kind() {
-                                                #( #prefix_op_match_arms, )*
-                                                _ => unreachable!("unknown prefix operator kind for this Pratt node"),
-
-                                            },
-                                            rhs: parts
-                                                .next()
-                                                .expect("invalid pratt node: found a single operator wihtout atom")
-                                                .into_node()
-                                                .expect("invalid pratt node: found operator and second child wasnt a node")
-                                                .clone()
-                                                .into(),
-                                        }),
+                                        Token(first) => {
+                                            // op rhs => prefix
+                                            #prefix_expr_body
+                                        }
                                     }
                                 }
                             }
