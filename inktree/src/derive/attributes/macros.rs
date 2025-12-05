@@ -151,7 +151,6 @@ macro_rules! make_sink {
         }
     };
 }
-
 #[macro_export]
 macro_rules! define_pratt_ext {
     (
@@ -166,38 +165,68 @@ macro_rules! define_pratt_ext {
             kind: $lang_name,
         }
 
-        pub type PrattExt<Atom> = ::inktree::chumsky::extension::v1::Ext<PrattExt_<Atom>>;
+        pub type PrattExt<Atom> =
+            ::inktree::chumsky::extension::v1::Ext<PrattExt_<Atom>>;
 
-        pub fn pratt_ext<Atom>(atom: Atom, kind:  $lang_name) -> PrattExt<Atom> {
+        pub fn pratt_ext<Atom>(atom: Atom, kind: $lang_name) -> PrattExt<Atom> {
             ::inktree::chumsky::extension::v1::Ext(PrattExt_ { atom, kind })
         }
 
-        impl<'src, 'cache, 'interner, 'borrow,'extra, Err, Atom>
+        impl<'src, 'cache, 'interner, 'borrow, 'extra, Err, Atom>
             ::inktree::chumsky::extension::v1::ExtParser<
                 'src,
                 &'src str,
                 (),
-                ::inktree::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>,
+                ::inktree::chumsky_ext::GreenExtra<
+                    'cache,
+                    'interner,
+                    'borrow,
+                    Err,
+                    $lang_name,
+                >,
             > for PrattExt_<Atom>
         where
             Err: ::inktree::chumsky::error::Error<'src, &'src str> + 'extra,
             Atom: ::inktree::chumsky_ext::BuilderParser<
-                'src, 'cache, 'interner, 'borrow, (), Err, $lang_name
-            > + Clone,
+                    'src,
+                    'cache,
+                    'interner,
+                    'borrow,
+                    (),
+                    Err,
+                    $lang_name,
+                > + Clone,
         {
             fn parse(
                 &self,
-                inp: &mut ::inktree::chumsky::input::InputRef<'src,'_,&'src str,::inktree::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>>,
+                inp: &mut ::inktree::chumsky::input::InputRef<
+                    'src,
+                    '_,
+                    &'src str,
+                    ::inktree::chumsky_ext::GreenExtra<
+                        'cache,
+                        'interner,
+                        'borrow,
+                        Err,
+                        $lang_name,
+                    >,
+                >,
             ) -> Result<(), Err> {
                 use ::inktree::engine::Builder;
                 use ::inktree::chumsky_ext::*;
 
-                fn go<'src, 'cache, 'interner, 'borrow,'extra, Err, Atom>(
+                fn go<'src, 'cache, 'interner, 'borrow, 'extra, Err, Atom>(
                     inp: &mut ::inktree::chumsky::input::InputRef<
                         'src,
                         '_,
                         &'src str,
-                        ::inktree::chumsky_ext::GreenExtra<'cache, 'interner, 'borrow, Err, $lang_name>,
+                        ::inktree::chumsky_ext::GreenExtra<
+                            'cache,
+                            'interner,
+                            'borrow,
+                            Err,
+                            $lang_name,
+                        >,
                     >,
                     atom: &Atom,
                     kind: $lang_name,
@@ -206,30 +235,41 @@ macro_rules! define_pratt_ext {
                 where
                     Err: ::inktree::chumsky::error::Error<'src, &'src str> + 'extra,
                     Atom: ::inktree::chumsky_ext::BuilderParser<
-                        'src, 'cache, 'interner, 'borrow, (), Err, $lang_name
-                    > + Clone,
+                            'src,
+                            'cache,
+                            'interner,
+                            'borrow,
+                            (),
+                            Err,
+                            $lang_name,
+                        > + Clone,
                 {
-                    // NUD: prefix-or-atom (once)
-                    let mut lhs_cp = 'nud: {
-                        let inp_cp = inp.save();
-
-                        // try exactly one prefix; chains/nesting happen in recursive `go`
+                    // ---------- NUD: prefix-or-atom ----------
+                    let lhs_cp = 'nud: {
+                        // Try each prefix operator with its own checkpoint.
                         $(
                             {
-                                // capture BEFORE consuming the prefix token so the node includes it
-                                let cp = inp.state().checkpoint();
-                                if let Ok(_) = inp.parse($p_parser) {
-                                    let _ = go(inp, atom, kind, $p_prec)?;
-                                    let builder = inp.state();
-                                    builder.start_node_at(cp, kind);
-                                    builder.finish_node();
-                                    break 'nud cp; // the expression starts at the prefix position
+                                let pre_op = inp.save();
+                                let cp = inp.state().checkpoint(); // where Expr node should start
+
+                                match inp.parse($p_parser) {
+                                    Ok(_) => {
+                                        // Parse the rest of the expression with this prefix’s precedence
+                                        let _ = go(inp, atom, kind, $p_prec)?;
+                                        let builder = inp.state();
+                                        builder.start_node_at(cp, kind);
+                                        builder.finish_node();
+                                        break 'nud cp;
+                                    }
+                                    Err(_) => {
+                                        // Parser failed; restore input and try next prefix
+                                        inp.rewind(pre_op);
+                                    }
                                 }
                             }
                         )*
 
-                        // no prefix matched: rewind and parse atom
-                        inp.rewind(inp_cp);
+                        // No prefix matched – parse bare atom
                         let atom_cp = inp.parse(&atom.clone().with_cp())?;
                         let builder = inp.state();
                         builder.start_node_at(atom_cp, kind);
@@ -237,55 +277,98 @@ macro_rules! define_pratt_ext {
                         break 'nud atom_cp;
                     };
 
-                    // LED: postfix + infix climbing loop
+                    // We keep lhs_cp as "start of the whole expression"
+                    let lhs_cp = lhs_cp;
+
+                    // ---------- LED: postfix + infix climbing ----------
                     loop {
-                        let checkpoint = inp.save();
+                        // Checkpoint for the *whole* expression at this point.
+                        // If no operator matches, or an operator has too low precedence,
+                        // we rewind to here and stop.
+                        let expr_cp = inp.save();
 
-                        // postfix
+                        // ----- POSTFIX -----
+                        let mut postfix_matched = false;
                         $(
-                            if let Ok(_) = inp.parse($x_parser) {
-                                if $x_prec < min_power {
-                                    inp.rewind(checkpoint);
-                                    break;
+                            if !postfix_matched {
+                                let pre_op = inp.save();
+
+                                match inp.parse($x_parser) {
+                                    Ok(_) => {
+                                        if $x_prec < min_power {
+                                            // Operator is too weak for this call: let outer level handle it.
+                                            inp.rewind(expr_cp);
+                                            break;
+                                        }
+
+                                        let builder = inp.state();
+                                        // Wrap from the *start* of the current expr (lhs_cp).
+                                        builder.start_node_at(lhs_cp, kind);
+                                        builder.finish_node();
+                                        postfix_matched = true;
+                                        // lhs_cp stays the same; expression just grew on the right.
+                                    }
+                                    Err(_) => {
+                                        // Not this postfix op → reset and try the next one.
+                                        inp.rewind(pre_op);
+                                    }
                                 }
-                                let builder = inp.state();
-                                // wrap from the start of the current expression
-                                builder.start_node_at(lhs_cp, kind);
-                                builder.finish_node();
-                                continue;
                             }
                         )*
 
-                        // infix
-                        $(
-                            if let Ok(_) = inp.parse($i_parser) {
-                                if $i_prec < min_power {
-                                    inp.rewind(checkpoint);
-                                    break;
-                                }
-                                let next_min = $crate::pratt_next_min_power!($i_prec, $i_assoc);
+                        if postfix_matched {
+                            // We consumed a postfix op: try to chain more postfix/infix operators.
+                            continue;
+                        }
 
-                                // parse RHS; the combined node still starts at lhs_cp
-                                let _ = go(inp, atom, kind, next_min)?;
-                                let builder = inp.state();
-                                builder.start_node_at(lhs_cp, kind);
-                                builder.finish_node();
-                                // lhs_cp stays as the start of the whole (lhs op rhs)
-                                continue;
+                        // ----- INFIX -----
+                        let mut infix_matched = false;
+                        $(
+                            if !infix_matched {
+                                let pre_op = inp.save();
+
+                                match inp.parse($i_parser) {
+                                    Ok(_) => {
+                                        if $i_prec < min_power {
+                                            // This operator binds less tightly than our caller, so bail.
+                                            inp.rewind(expr_cp);
+                                            break;
+                                        }
+
+                                        let next_min = $crate::pratt_next_min_power!($i_prec, $i_assoc);
+
+                                        // Parse RHS; the resulting Expr node still starts at lhs_cp.
+                                        let _ = go(inp, atom, kind, next_min)?;
+                                        let builder = inp.state();
+                                        builder.start_node_at(lhs_cp, kind);
+                                        builder.finish_node();
+                                        infix_matched = true;
+                                        // lhs_cp stays as the start of the whole (lhs op rhs) expression.
+                                    }
+                                    Err(_) => {
+                                        // Not this infix op → reset input, try next infix.
+                                        inp.rewind(pre_op);
+                                    }
+                                }
                             }
                         )*
 
-                        inp.rewind(checkpoint);
+                        if infix_matched {
+                            // We consumed an infix op: loop to see if more operators chain.
+                            continue;
+                        }
+
+                        // No postfix or infix matched here: expression is done at this precedence.
+                        inp.rewind(expr_cp);
                         break;
                     }
 
                     Ok(lhs_cp)
                 }
 
+                // Start from min_power = 0 (all your operator precedences are >= 1).
                 go(inp, &self.atom, self.kind, 0)?;
-
                 Ok(())
-                
             }
         }
     };
