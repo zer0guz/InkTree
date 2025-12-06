@@ -20,7 +20,7 @@ type Input<'src> = &'src str;
 pub trait BuilderParser<'src, 'cache, 'interner, 'borrow, O, Err, Sy>:
     Parser<'src, Input<'src>, O, GreenExtra<'cache, 'interner, 'borrow, Err, Sy>>
 where
-    Err: chumsky::error::Error<'src, &'src str> + 'src,
+    Err: chumsky::error::Error<'src, &'src str>,
     Builder<'cache, 'interner, 'borrow, Sy>:
         Inspector<'src, &'src str, Checkpoint = cstree::build::Checkpoint>,
     'interner: 'cache,
@@ -59,7 +59,7 @@ impl<'src, 'cache, 'interner, 'borrow, O, P, Err, Sy>
     BuilderParser<'src, 'cache, 'interner, 'borrow, O, Err, Sy> for P
 where
     P: chumsky::Parser<'src, &'src str, O, GreenExtra<'cache, 'interner, 'borrow, Err, Sy>> + Clone,
-    Err: chumsky::error::Error<'src, &'src str> + 'src,
+    Err: chumsky::error::Error<'src, &'src str>,
     Sy: Syntax,
     'interner: 'cache,
     'borrow: 'interner,
@@ -119,7 +119,7 @@ pub fn ranges<'src, 'cache, 'interner, 'borrow, Err, Sy, R>(
     ranges: &[R],
 ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, char, Err, Sy> + Clone
 where
-    Err: chumsky::error::Error<'src, &'src str>+ 'src,
+    Err: chumsky::error::Error<'src, &'src str>,
     Sy: Syntax,
     R: RangeBounds<char>,
     'interner: 'cache,
@@ -210,7 +210,7 @@ impl<'src, 'cache, 'interner, 'borrow, Err, Sy, P>
     ExtParser<'src, Input<'src>, (), GreenExtra<'cache, 'interner, 'borrow, Err, Sy>>
     for AsToken_<P, Sy>
 where
-    Err: chumsky::error::Error<'src, &'src str> + 'src,
+    Err: chumsky::error::Error<'src, &'src str>,
     P: BuilderParser<'src, 'cache, 'interner, 'borrow, &'src str, Err, Sy>,
     Sy: Syntax,
 {
@@ -248,7 +248,7 @@ impl<'src, 'cache, 'interner, 'borrow, Err, Sy, P>
     ExtParser<'src, Input<'src>, (), GreenExtra<'cache, 'interner, 'borrow, Err, Sy>>
     for WrapCp_<P, Sy>
 where
-    Err: chumsky::error::Error<'src, &'src str>+ 'src,
+    Err: chumsky::error::Error<'src, &'src str>,
     P: BuilderParser<'src, 'cache, 'interner, 'borrow, cstree::build::Checkpoint, Err, Sy>,
     Sy: Syntax,
 {
@@ -302,7 +302,7 @@ impl<'src, 'cache, 'interner, 'borrow, Err, Sy, P, O>
     for Always_<P, O>
 where
     P: BuilderParser<'src, 'cache, 'interner, 'borrow, O, Err, Sy>,
-    Err: chumsky::error::Error<'src, &'src str> + 'src,
+    Err: chumsky::error::Error<'src, &'src str>,
     Sy: Syntax,
 {
     fn parse(

@@ -1,6 +1,5 @@
 mod allowed;
 mod attributes;
-mod macros;
 mod node;
 mod pratt;
 mod rule;

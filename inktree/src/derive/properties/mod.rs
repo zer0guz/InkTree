@@ -6,6 +6,7 @@ mod operator;
 mod padding;
 mod root;
 mod whitespace;
+mod recovery;
 
 use std::str::FromStr;
 
@@ -17,6 +18,8 @@ pub use ast::Ast;
 pub use extra::*;
 pub use operator::*;
 pub use root::*;
+pub(crate) use recovery::* ;
+
 
 use crate::{
     derive::{
@@ -44,6 +47,7 @@ pub enum Property {
     // Whitespace(Whitespace),
     Extra(Extra),
     Ast(Ast),
+    Recover(Recover)
 }
 impl Property {
     pub fn try_as_operator(&self) -> Option<OperatorKind> {
@@ -87,6 +91,7 @@ impl PropertyKind {
             Pk::OpPostfix => Ok(Postfix::from_meta(meta, None)?.into()),
             Pk::Extra => Ok(Extra::from_meta(meta, None)?.into()),
             Pk::Ast => Ok(Ast::from_meta(meta, None)?.into()),
+            Pk::Recover => Ok(Recover::from_meta(meta, None)?.into()),
         }
     }
 }

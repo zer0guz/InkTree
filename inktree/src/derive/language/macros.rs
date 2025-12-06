@@ -2,18 +2,19 @@
 macro_rules! make_parser {
     // with params: list of idents
     ($lang:ident, [$($arg:ident),*], $body:block) => {
-        fn parser<'src, 'cache, 'interner,'borrow, Err>(
+        fn parser<'src, 'cache, 'interner,'borrow,'extra, Err>(
             $(
                 $arg: impl $crate::chumsky_ext::BuilderParser<
                     'src, 'cache, 'interner,'borrow, (), Err, $lang
-                > + Clone
+                > + Clone + 'extra
             ),*
         ) -> $crate::impl_type!($lang)
         where
-            Err: $crate::chumsky::error::Error<'src, &'src str> + 'src,
+            Err: $crate::chumsky::error::Error<'src, &'src str> + 'extra,
             'interner: 'cache,
             'borrow: 'interner,
-            'cache: 'src
+            'cache: 'extra,
+            'src: 'extra
 
         {
             use inktree::chumsky_ext::*;
@@ -28,14 +29,14 @@ macro_rules! impl_type {
     ($lang:ident) => {
         impl ::inktree::chumsky_ext::BuilderParser<
             'src, 'cache, 'interner,'borrow, (), Err, $lang
-        > + Clone
+        > + Clone + 'extra
     };
 }
 
 #[macro_export]
 macro_rules! make_anchored_parser {
     ($lang:ident, [$($anchor:ident),*], [$($param:ident),*], $body:block) => {
-        fn anchored_parser<'src, 'cache, 'interner,'borrow, Err>(
+        fn anchored_parser<'src, 'cache, 'interner,'borrow,'extra, Err>(
             $(
                 $anchor: $crate::impl_type!($lang),
             )*
@@ -44,10 +45,11 @@ macro_rules! make_anchored_parser {
             )*
         ) -> $crate::impl_type!($lang)
         where
-            Err:  $crate::chumsky::error::Error<'src, &'src str> + 'src,
+            Err:  $crate::chumsky::error::Error<'src, &'src str> + 'extra,
             'interner: 'cache,
             'borrow: 'interner,
-            'cache: 'src,
+            'src: 'extra,
+            'cache: 'extra,
 
 
         {
@@ -61,11 +63,11 @@ macro_rules! make_anchored_parser {
 
 #[macro_export]
 macro_rules! parseable {
-    ($lang_name:ident::$name:ident, [$($param:ident),*], $body:block) => {
+    ($lang_name:ident::$name:ident, [$($param:ident),*], $body:block, $recovery:path) => {
         impl ::inktree::Parseable for $name {
             type Syntax = $lang_name;
             inktree::make_parser!($lang_name, [$($param),*], $body);
-            type RecoverySpec = ::inktree::engine::NoRecovery;
+            type RecoverySpec = $recovery;
         }
     };
 }
@@ -76,31 +78,41 @@ macro_rules! token {
     ($lang_name:ident :: $name:ident, $body:block) => {
         #[derive(Debug)]
         pub(crate) struct $name;
-        $crate::parseable!($lang_name::$name, [], {
-            use $crate::chumsky::Parser;
-            use $crate::chumsky::prelude::*;
-            use $crate::chumsky_ext::*;
-            $body.as_token($lang_name::$name)
-        });
+        $crate::parseable!(
+            $lang_name::$name,
+            [],
+            {
+                use $crate::chumsky::Parser;
+                use $crate::chumsky::prelude::*;
+                use $crate::chumsky_ext::*;
+                $body.as_token($lang_name::$name)
+            },
+            ::inktree::engine::recovery::NoRecovery
+        );
     };
 
     // with sink
     ($lang_name:ident :: $name:ident, $body:block, has_extras) => {
         #[derive(Debug)]
         pub(crate) struct $name;
-        $crate::parseable!($lang_name::$name, [], {
-            use $crate::chumsky::Parser;
-            use $crate::chumsky::prelude::*;
-            use $crate::chumsky_ext::*;
-            $lang_name::sink($body.as_token($lang_name::$name))
-        });
+        $crate::parseable!(
+            $lang_name::$name,
+            [],
+            {
+                use $crate::chumsky::Parser;
+                use $crate::chumsky::prelude::*;
+                use $crate::chumsky_ext::*;
+                $lang_name::sink($body.as_token($lang_name::$name))
+            },
+            ::inktree::engine::recovery::NoRecovery
+        );
     };
 }
 
 #[macro_export]
 macro_rules! static_token {
     // no sink
-    ($lang_name:ident :: $name:ident, $text:literal) => {
+    ($lang_name:ident :: $name:ident, $text:literal,) => {
         #[derive(Debug)]
         pub struct $name;
         $crate::parseable!($lang_name::$name, [], {
@@ -114,11 +126,16 @@ macro_rules! static_token {
     ($lang_name:ident :: $name:ident, $text:literal, has_extras) => {
         #[derive(Debug)]
         pub struct $name;
-        $crate::parseable!($lang_name::$name, [], {
-            use $crate::chumsky::prelude::*;
-            use $crate::chumsky_ext::*;
-            $lang_name::sink(just($text).as_static_token($lang_name::$name))
-        });
+        $crate::parseable!(
+            $lang_name::$name,
+            [],
+            {
+                use $crate::chumsky::prelude::*;
+                use $crate::chumsky_ext::*;
+                $lang_name::sink(just($text).as_static_token($lang_name::$name))
+            },
+            ::inktree::engine::recovery::NoRecovery
+        );
     };
 }
 
@@ -126,14 +143,15 @@ macro_rules! static_token {
 macro_rules! make_sink {
     ($lang:ident, [$($extra:ident),+ $(,)?]) => {
         impl $lang {
-            fn sink<'src, 'cache, 'interner,'borrow, Err>(
+            fn sink<'src, 'cache, 'interner,'borrow, 'extra,Err>(
                 parser: $crate::impl_type!($lang)
             ) -> $crate::impl_type!($lang)
             where
-                Err:  $crate::chumsky::error::Error<'src, &'src str> + 'src,
+                Err:  $crate::chumsky::error::Error<'src, &'src str> + 'extra,
                 'interner: 'cache,
                 'borrow: 'interner,
-                'cache: 'src,
+                'src: 'extra,
+                'cache: 'extra,
 
             {
                 use $crate::chumsky::prelude::*;
@@ -171,7 +189,7 @@ macro_rules! define_pratt_ext {
             ::inktree::chumsky::extension::v1::Ext(PrattExt_ { atom, kind })
         }
 
-        impl<'src, 'cache, 'interner, 'borrow, Err, Atom>
+        impl<'src, 'cache, 'interner, 'borrow,'extra, Err, Atom>
             ::inktree::chumsky::extension::v1::ExtParser<
                 'src,
                 &'src str,
@@ -185,8 +203,7 @@ macro_rules! define_pratt_ext {
                 >,
             > for PrattExt_<Atom>
         where
-            Err: ::inktree::chumsky::error::Error<'src, &'src str> + 'src,
-            'cache: 'src,
+            Err: ::inktree::chumsky::error::Error<'src, &'src str> + 'extra,
             Atom: ::inktree::chumsky_ext::BuilderParser<
                     'src,
                     'cache,
@@ -215,7 +232,7 @@ macro_rules! define_pratt_ext {
                 use ::inktree::engine::Builder;
                 use ::inktree::chumsky_ext::*;
 
-                fn go<'src, 'cache, 'interner, 'borrow, Err, Atom>(
+                fn go<'src, 'cache, 'interner, 'borrow,'extra, Err, Atom>(
                     inp: &mut ::inktree::chumsky::input::InputRef<
                         'src,
                         '_,
@@ -233,8 +250,7 @@ macro_rules! define_pratt_ext {
                     min_power: u16,
                 ) -> Result<::inktree::cstree::build::Checkpoint, Err>
                 where
-                    Err: ::inktree::chumsky::error::Error<'src, &'src str> + 'src,
-                    'cache: 'src,
+                    Err: ::inktree::chumsky::error::Error<'src, &'src str> + 'extra,
                     Atom: ::inktree::chumsky_ext::BuilderParser<
                             'src,
                             'cache,

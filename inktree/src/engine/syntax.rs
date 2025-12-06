@@ -8,14 +8,16 @@ pub trait Syntax: cstree::Syntax + 'static {
 
     fn into_raw(self) -> cstree::RawSyntaxKind;
 
-    fn parser<'src, 'cache, 'interner, 'borrow, Err>(
+    fn parser<'src, 'cache, 'interner, 'borrow,'extra, Err>(
         self,
     ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Self>
     where
-        Err: chumsky::error::Error<'src, &'src str> + 'src,
+        Err: chumsky::error::Error<'src, &'src str> + 'extra,
         'interner: 'cache,
         'borrow: 'interner,
-        'cache: 'src;
+        'src: 'extra,
+        'cache: 'extra;
+        
 
     fn is_ast_relevant(&self) -> bool;
 }

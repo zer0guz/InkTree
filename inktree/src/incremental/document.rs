@@ -30,14 +30,15 @@ where {
         self.root.get().unwrap()
     }
 
-    pub fn parse<'src, Err>(
-        &mut self,
+    pub fn parse<'src,'cache, Err>(
+        &'cache mut self,
         input: &'src str,
     ) -> Result<AstNodeWrapper<Sy::Root, Unchecked, Sy>, ()>
     where
         Sy: Syntax,
         Err: chumsky::error::Error<'src, &'src str> + Debug,
         'interner: 'src,
+
     {
         let green = <Sy as ParserEngine>::parse_with_cache::<Err>(&mut self.cache, input).unwrap();
         let root = SyntaxNode::new_root(green);

@@ -17,7 +17,7 @@ use crate::{
     derive::{
         attributes::allowed::ALLOWED_RULE,
         parser::{DslExpr, FromMeta, ParserCtx},
-        properties::{Property, PropertyKind},
+        properties::{Property, PropertyKind, Recover, RecoverKind},
     },
     language::{ElementError, Language, LanguageElement},
 };
@@ -27,6 +27,7 @@ pub(crate) struct Rule {
     pub name: Ident,
     pub parameters: Vec<Ident>,
     pub dsl: DslExpr,
+    pub recovery: Option<Recover>,
 }
 
 impl Rule {
@@ -35,6 +36,7 @@ impl Rule {
             name,
             parameters,
             dsl: dsl,
+            recovery: None,
         }
     }
     pub fn parser_body(&self, language: &Language) -> TokenStream {
@@ -67,6 +69,12 @@ impl Rule {
 
         // collect declared params
         let param_idents: Vec<_> = self.parameters.iter().collect();
+
+        let recovery = self
+            .recovery
+            .as_ref()
+            .map(|recover| recover.codegen())
+            .unwrap_or(quote! {::inktree::engine::recovery::NoRecovery});
 
         if in_cycle {
             // build peer + anchor info from SCC
@@ -129,7 +137,7 @@ impl Rule {
                 use ::inktree::chumsky::recursive::*;
 
                 // one declare for each SCC member
-                #( let mut #decls = Recursive::declare();)*
+                #( let mut #decls = Recursive::<Indirect<'src, 'extra, _, _, _>>::declare();)*
                 // define each SCC member with its specific anchors
                 #( #defines;)*
 
@@ -146,7 +154,7 @@ impl Rule {
                         inktree::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
                         //inktree::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
                     }
-                    inktree::parseable!(#lang_ident::#name_ident,  [#(#param_idents),*],{#wrapper});
+                    inktree::parseable!(#lang_ident::#name_ident,  [#(#param_idents),*],{#wrapper},#recovery);
                 }
             } else {
                 quote! {
@@ -164,7 +172,7 @@ impl Rule {
                 quote! {
                     #[derive(Debug)]
                     pub struct #name_ident;
-                    inktree::parseable!(#lang_ident::#name_ident, [#(#param_idents),*],{#body});
+                    inktree::parseable!(#lang_ident::#name_ident, [#(#param_idents),*],{#body},#recovery);
                 }
             } else {
                 quote! {
@@ -188,7 +196,6 @@ impl FromMeta for Rule {
 
 impl Parse for Rule {
     fn parse(input: ParseStream) -> Result<Self, syn::Error> {
-        // parse the rule name
         let name: Ident = input.parse()?;
 
         // optional generic-like params: <x, y, z>
@@ -205,7 +212,6 @@ impl Parse for Rule {
         // expect '='
         input.parse::<Token![=]>()?;
 
-        // everything else is your DSL rhs
         let rhs = input.parse::<proc_macro2::TokenStream>()?.to_string();
         let tokens = crate::derive::parser::dsl_lexer()
             .parse(rhs.as_str())
@@ -222,6 +228,7 @@ impl Parse for Rule {
             dsl,
             name,
             parameters,
+            recovery: None,
         })
     }
 }
@@ -244,7 +251,7 @@ impl LanguageElement for Rule {
 
     fn build(
         &mut self,
-        _properties: &Vec<Property>,
+        properties: &Vec<Property>,
         language: &mut Language,
     ) -> Result<(), ElementError> {
         // Collect in the original traversal order.
@@ -259,6 +266,13 @@ impl LanguageElement for Rule {
         deps.retain(|d| seen.insert(d.clone()));
 
         language.cycle_graph.add_rule(self.name.clone(), &deps);
+
+        if let Some(recovery) = properties.iter().find_map(|prop| match prop {
+            Property::Recover(r) => Some(r),
+            _ => None,
+        }) {
+            self.recovery = Some(recovery.clone());
+        }
         Ok(())
     }
 
