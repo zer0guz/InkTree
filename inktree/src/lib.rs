@@ -14,5 +14,5 @@ pub use cstree;
 pub use derive::*;
 pub use error::Errors;
 
-pub use derive::language::Parseable;
-pub use derive::language::Syntax;
+pub use engine::Parseable;
+pub use engine::Syntax;

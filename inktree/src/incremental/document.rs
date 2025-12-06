@@ -1,36 +1,54 @@
 use chumsky::inspector::Inspector;
 use cstree::{build::NodeCache, interning::MultiThreadedTokenInterner};
-use std::fmt::Debug;
+use std::{cell::OnceCell, fmt::Debug, marker::PhantomData, mem::MaybeUninit, sync::OnceLock};
 
 use crate::{
-    engine::{Builder, parse_with_cache},
-    language::Syntax,
+    AstNodeWrapper, SyntaxNode, Unchecked,
+    engine::{Builder, ParserEngine},
+    engine::Syntax,
 };
 
-pub struct DocumentSession<'interner, 'borrow> {
+pub struct DocumentSession<'interner, 'borrow, Sy: Syntax> {
     cache: NodeCache<'interner, &'borrow MultiThreadedTokenInterner>,
+    root: OnceCell<SyntaxNode<Sy>>,
+    _phantom: PhantomData<Sy>,
 }
 
-impl<'interner, 'borrow> DocumentSession<'interner, 'borrow> {
+impl<'interner, 'borrow, Sy: Syntax> DocumentSession<'interner, 'borrow, Sy> {
     pub fn new(interner: &'borrow MultiThreadedTokenInterner) -> Self
 where {
         let cache = NodeCache::from_interner(&*interner);
 
-        Self { cache: cache }
+        Self {
+            cache,
+            _phantom: PhantomData,
+            root: OnceCell::new(),
+        }
     }
 
-    pub fn parse<'src, Err, Sy>(
-        cache: &mut NodeCache<'interner, &'borrow MultiThreadedTokenInterner>,
+    fn root(&self) -> &SyntaxNode<Sy> {
+        self.root.get().unwrap()
+    }
+
+    pub fn parse<'src, Err>(
+        &mut self,
         input: &'src str,
-    ) where
+    ) -> Result<AstNodeWrapper<Sy::Root, Unchecked, Sy>, ()>
+    where
         Sy: Syntax,
         Err: chumsky::error::Error<'src, &'src str> + Debug,
         'interner: 'src,
     {
-        let _ = parse_with_cache::<Sy::Root, Err, Sy>(cache, input).unwrap();
+        let green = <Sy as ParserEngine>::parse_with_cache::<Err>(&mut self.cache, input).unwrap();
+        let root = SyntaxNode::new_root(green);
+
+        self.root.set(root);
+
+        let ast = AstNodeWrapper::from(self.root().clone());
+        Ok(ast)
     }
 
-    pub fn open<'src, Err, Sy>(
+    pub fn open<'src, Err>(
         initial: &'src str,
         interner: &'interner mut &'borrow MultiThreadedTokenInterner,
     ) -> Result<Self, Err>
@@ -41,11 +59,13 @@ where {
         Sy: Syntax,
         'interner: 'src,
     {
-        let mut a: DocumentSession<'interner, 'borrow> = Self {
+        let mut a: DocumentSession<'interner, 'borrow, Sy> = Self {
             cache: NodeCache::with_interner(interner),
+            _phantom: PhantomData,
+            root: OnceCell::new(),
         };
 
-        Self::parse::<Err, Sy>(&mut a.cache, initial);
+        Self::parse::<Err>(&mut a, initial);
 
         Ok(a)
     }

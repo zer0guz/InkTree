@@ -1,39 +1,44 @@
 use std::fmt::Debug;
 
-use chumsky::Parser;
+use chumsky::{Parser, error::EmptyErr};
 use cstree::{build::NodeCache, green::GreenNode, interning::MultiThreadedTokenInterner};
 
-use crate::{
-    engine::Builder,
-    language::{Parseable, Syntax},
-};
-pub fn parse_with_cache<'src, 'cache, 'interner, 'borrow, Tok, Err, Sy>(
-    cache: &mut NodeCache<'interner, &'borrow MultiThreadedTokenInterner>,
-    input: &'src str,
-) -> Result<GreenNode, Err>
-where
-    Err: chumsky::error::Error<'src, &'src str> + Debug,
-    Tok: Parseable<Syntax = Sy>,
-    Sy: Syntax,
-    'interner: 'src,
-{
-    let green = {
-        // builder is local to this block
+use crate::engine::{Builder, Parseable, Syntax, recovery::Recovering};
+
+pub trait ParserEngine {
+    type Syntax: Syntax;
+
+    fn parse_with_cache<'src, 'cache, 'interner, 'borrow, Err>(
+        cache: &mut NodeCache<'interner, &'borrow MultiThreadedTokenInterner>,
+        input: &'src str,
+    ) -> Result<GreenNode, Err>
+    where
+        Err: chumsky::error::Error<'src, &'src str> + Debug,
+        'interner: 'src,
+    {
         let mut builder = Builder::with_cache(cache);
+        
 
-        let parser = Tok::parser::<Err>();
-        {
-            let result = parser.parse_with_state(input, &mut builder);
+        let parser = <Self::Syntax as Syntax>::Root::parser::<EmptyErr>();
+        let result = parser.parse_with_state(input, &mut builder);
 
-            result.unwrap();
+        let green = match result.into_result(){
+            Ok(_) => {
+                 let (green, _returned_cache) = builder.finish();
+                 green
+            },
+            Err(err) => {
+                //let parser = <Self::Syntax as Syntax>::Root::go::<EmptyErr,Recovering>();
+                todo!()
+            },
         }
 
-        let (green, _returned_cache) = builder.finish();
+       ;
 
-        // optionally return the cache to caller here...
+        Ok(green)
+    }
+}
 
-        green
-    };
-
-    Ok(green)
+impl<Sy: Syntax> ParserEngine for Sy {
+    type Syntax = Sy;
 }

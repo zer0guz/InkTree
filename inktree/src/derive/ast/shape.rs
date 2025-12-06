@@ -1120,6 +1120,7 @@
                                 ::inktree::ast_node_kind!(#lang_ident::#name => #ast_name, #enum_name);
 
                                 /// View enum for the `#name` AST node.
+                                #[derive(Debug)]
                                 pub enum #enum_name<S: inktree::State> {
                                     #( #enum_variants, )*
                                 }

@@ -151,15 +151,14 @@ impl Language {
                     }
                 }
 
-                fn parser<'src, 'cache, 'interner,'borrow,'extra, Err>(
+                fn parser<'src, 'cache, 'interner,'borrow, Err>(
                     self,
-                ) -> impl ::inktree::chumsky_ext::BuilderParser<'src, 'cache, 'interner,'borrow, (), Err, Self> + Clone + 'extra
+                ) -> impl ::inktree::chumsky_ext::BuilderParser<'src, 'cache, 'interner,'borrow, (), Err, Self> + Clone
                 where
-                    Err: ::inktree::chumsky::error::Error<'src, &'src str> + 'extra,
+                    Err: ::inktree::chumsky::error::Error<'src, &'src str> + 'src,
                     'interner: 'cache,
                     'borrow: 'interner,
-                    'src: 'extra,
-                    'cache: 'extra,
+                    'cache: 'src,
 
                 {
                     use ::inktree::chumsky::prelude::*;

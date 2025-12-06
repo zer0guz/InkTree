@@ -5,7 +5,7 @@ use cstree::{
     interning::MultiThreadedTokenInterner,
 };
 
-use crate::{chumsky_ext::GreenState, language::Syntax};
+use crate::{chumsky_ext::GreenState, engine::Syntax};
 
 pub struct Builder<'cache, 'interner, 'borrow, Sy>
 where

@@ -1,4 +1,4 @@
-use crate::{Parseable, chumsky_ext::BuilderParser};
+use crate::{chumsky_ext::BuilderParser, engine::Parseable};
 
 pub trait Syntax: cstree::Syntax + 'static {
     type Root: Parseable<Syntax = Self>;
@@ -8,15 +8,14 @@ pub trait Syntax: cstree::Syntax + 'static {
 
     fn into_raw(self) -> cstree::RawSyntaxKind;
 
-    fn parser<'src, 'cache, 'interner, 'borrow, 'extra, Err>(
+    fn parser<'src, 'cache, 'interner, 'borrow, Err>(
         self,
     ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Self>
     where
-        Err: chumsky::error::Error<'src, &'src str> + 'extra,
+        Err: chumsky::error::Error<'src, &'src str> + 'src,
         'interner: 'cache,
         'borrow: 'interner,
-        'src: 'extra,
-        'cache: 'extra;
+        'cache: 'src;
 
     fn is_ast_relevant(&self) -> bool;
 }
