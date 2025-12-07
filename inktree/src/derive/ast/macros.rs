@@ -21,7 +21,6 @@ macro_rules! ast_node_kind {
         unsafe impl $crate::Kind for $variant {
             type Syntax = $lang;
 
-
             const KINDS: &'static [Self::Syntax] = &[$lang::$variant];
         }
 

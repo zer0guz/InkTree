@@ -4,9 +4,9 @@ mod extra;
 mod keyword;
 mod operator;
 mod padding;
+mod recovery;
 mod root;
 mod whitespace;
-mod recovery;
 
 use std::str::FromStr;
 
@@ -17,9 +17,8 @@ use syn::Meta;
 pub use ast::Ast;
 pub use extra::*;
 pub use operator::*;
+pub(crate) use recovery::*;
 pub use root::*;
-pub(crate) use recovery::* ;
-
 
 use crate::{
     derive::{
@@ -47,7 +46,7 @@ pub enum Property {
     // Whitespace(Whitespace),
     Extra(Extra),
     Ast(Ast),
-    Recover(Recover)
+    Recover(Recover),
 }
 impl Property {
     pub fn try_as_operator(&self) -> Option<OperatorKind> {

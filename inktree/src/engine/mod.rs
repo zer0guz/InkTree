@@ -2,8 +2,8 @@ mod builder;
 mod engine;
 mod errors;
 mod parseable;
-mod syntax;
 pub mod recovery;
+mod syntax;
 
 pub use builder::Builder;
 pub use engine::ParserEngine;

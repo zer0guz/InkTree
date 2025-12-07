@@ -24,7 +24,6 @@ where
         'cache: 'extra,
         'src: 'extra;
 
-
     fn recover<'src, 'cache, 'interner, 'borrow, 'extra, Err>()
     -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Self::Syntax> + Clone + 'extra
     where
@@ -32,8 +31,8 @@ where
         'interner: 'cache,
         'borrow: 'interner,
         'src: 'extra,
-        'cache: 'extra, 
-        Self: 'extra
+        'cache: 'extra,
+        Self: 'extra,
     {
         Self::go::<'_, '_, '_, '_, '_, _, Recovering>()
     }
@@ -47,7 +46,7 @@ where
         'borrow: 'interner,
         Self: 'extra,
         'src: 'extra,
-        'cache: 'extra
+        'cache: 'extra,
     {
         let base = Self::parser();
 

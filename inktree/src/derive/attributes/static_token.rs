@@ -12,7 +12,7 @@ use crate::{
     language::{ElementError, Language, LanguageElement},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 
 pub struct StaticToken {
     pub text: String,

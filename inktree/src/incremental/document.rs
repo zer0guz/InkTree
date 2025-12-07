@@ -1,11 +1,11 @@
 use chumsky::inspector::Inspector;
 use cstree::{build::NodeCache, interning::MultiThreadedTokenInterner};
-use std::{cell::OnceCell, fmt::Debug, marker::PhantomData, mem::MaybeUninit, sync::OnceLock};
+use std::{cell::OnceCell, fmt::Debug, marker::PhantomData};
 
 use crate::{
     AstNodeWrapper, SyntaxNode, Unchecked,
-    engine::{Builder, ParserEngine},
     engine::Syntax,
+    engine::{Builder, ParserEngine},
 };
 
 pub struct DocumentSession<'interner, 'borrow, Sy: Syntax> {
@@ -30,7 +30,7 @@ where {
         self.root.get().unwrap()
     }
 
-    pub fn parse<'src,'cache, Err>(
+    pub fn parse<'src, 'cache, Err>(
         &'cache mut self,
         input: &'src str,
     ) -> Result<AstNodeWrapper<Sy::Root, Unchecked, Sy>, ()>
@@ -38,9 +38,9 @@ where {
         Sy: Syntax,
         Err: chumsky::error::Error<'src, &'src str> + Debug,
         'interner: 'src,
-
     {
-        let green = <Sy as ParserEngine>::parse_with_cache::<Err>(&mut self.cache, input).unwrap();
+        let green = <Sy as ParserEngine>::parse_with_cache::<Err>(&mut self.cache, input)
+            .expect("oh no :S");
         let root = SyntaxNode::new_root(green);
 
         self.root.set(root);

@@ -320,3 +320,45 @@ where
         }
     }
 }
+#[derive(Debug, Clone)]
+pub struct Recover_<Inner, Rec> {
+    pub inner: Inner,
+    pub rec: Rec,
+}
+
+pub type Recover<Inner, Rec> = Ext<Recover_<Inner, Rec>>;
+
+pub fn recover<Inner, Rec>(inner: Inner, rec: Rec) -> Recover<Inner, Rec> {
+    Ext(Recover_ { inner, rec })
+}
+
+impl<'src, 'cache, 'interner, 'borrow, Err, Sy, Inner, Rec>
+    ExtParser<'src, &'src str, (), GreenExtra<'cache, 'interner, 'borrow, Err, Sy>>
+    for Recover_<Inner, Rec>
+where
+    Sy: Syntax,
+    Err: chumsky::error::Error<'src, &'src str>,
+    Inner: BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Sy> + Clone,
+    Rec:
+        Parser<'src, &'src str, &'src str, GreenExtra<'cache, 'interner, 'borrow, Err, Sy>> + Clone,
+{
+    fn parse(
+        &self,
+        inp: &mut InputRef<'src, '_, &'src str, GreenExtra<'cache, 'interner, 'borrow, Err, Sy>>,
+    ) -> Result<(), Err> {
+        let checkpoint = inp.save();
+
+        if let Ok(()) = inp.parse(self.inner.clone()) {
+            return Ok(());
+        }
+
+        inp.rewind(checkpoint);
+
+        let junk_slice: &'src str = inp.parse(self.rec.clone())?;
+
+        let builder = inp.state();
+        builder.token(Sy::ERROR, junk_slice);
+
+        Ok(())
+    }
+}

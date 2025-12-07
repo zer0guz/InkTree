@@ -1,6 +1,7 @@
 use crate::{chumsky_ext::BuilderParser, engine::Parseable};
 
 pub trait Syntax: cstree::Syntax + 'static {
+    const ERROR: Self;
     type Root: Parseable<Syntax = Self>;
     fn static_text(self) -> Option<&'static str>;
 
@@ -8,7 +9,7 @@ pub trait Syntax: cstree::Syntax + 'static {
 
     fn into_raw(self) -> cstree::RawSyntaxKind;
 
-    fn parser<'src, 'cache, 'interner, 'borrow,'extra, Err>(
+    fn parser<'src, 'cache, 'interner, 'borrow, 'extra, Err>(
         self,
     ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, Self>
     where
@@ -17,7 +18,6 @@ pub trait Syntax: cstree::Syntax + 'static {
         'borrow: 'interner,
         'src: 'extra,
         'cache: 'extra;
-        
 
     fn is_ast_relevant(&self) -> bool;
 }

@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use crate::{
     derive::{
-        attributes::{Node, Pratt, Rule, StaticToken, Token},
+        attributes::{Node, Pratt, Rule, StaticToken, Token, error::Error},
         parser::FromMeta,
     },
     language::ElementError,
@@ -22,6 +22,7 @@ pub(crate) enum SyntaxAttribute {
     Token(Token),
     Pratt(Pratt),
     Rule(Rule),
+    Error(Error),
 }
 
 impl SyntaxAttributeKind {
@@ -36,6 +37,7 @@ impl SyntaxAttributeKind {
             Self::Token => Ok(Token::from_meta(meta, name)?.into()),
             Self::Pratt => Ok(Pratt::from_meta(meta, name)?.into()),
             Self::Rule => Ok(Rule::from_meta(meta, name)?.into()),
+            Self::Error => Ok(Error::from_meta(meta, name)?.into()),
         }
     }
 }

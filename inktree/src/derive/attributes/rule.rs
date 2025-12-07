@@ -17,7 +17,7 @@ use crate::{
     derive::{
         attributes::allowed::ALLOWED_RULE,
         parser::{DslExpr, FromMeta, ParserCtx},
-        properties::{Property, PropertyKind, Recover, RecoverKind},
+        properties::{Property, PropertyKind, Recover},
     },
     language::{ElementError, Language, LanguageElement},
 };

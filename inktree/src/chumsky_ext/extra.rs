@@ -14,4 +14,5 @@ pub trait GreenState<Sy> {
     fn checkpoint(&self) -> cstree::build::Checkpoint;
     fn token(&mut self, kind: Sy, slice: &str);
     fn static_token(&mut self, kind: Sy);
+    fn start_node(&mut self, kind: Sy);
 }

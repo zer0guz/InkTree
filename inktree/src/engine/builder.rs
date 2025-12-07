@@ -79,6 +79,10 @@ where
         self.builder.checkpoint()
     }
 
+    fn start_node(&mut self, kind: Sy) {
+        self.builder.start_node(kind);
+    }
+
     fn token(&mut self, kind: Sy, slice: &str) {
         self.builder.token(kind, slice);
     }

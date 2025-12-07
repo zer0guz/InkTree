@@ -53,9 +53,7 @@ impl LanguageElement for Node {
         };
         let code = self.0.parser(node, language, true);
 
-        Ok(
-            code, 
-        )
+        Ok(code)
     }
 
     fn allowed(&self) -> &'static [PropertyKind] {

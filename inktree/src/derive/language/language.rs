@@ -54,6 +54,7 @@ pub(crate) struct Language {
     pub ident: Ident,
     pub operators: Vec<Operator>,
     pub root: Option<Handle<Element>>,
+    pub error_token: Option<Ident>,
     pub cycle_graph: RuleGraph,
     pub recursion_info: Option<RecursionInfo>,
     pub extras: Vec<Ident>,
@@ -97,7 +98,7 @@ impl Language {
                     _ => quote! {},
                 };
                 let lang_ident = &self.ident;
-                let parser = quote! {
+                let mut parser = quote! {
                     #lang_ident::#ident => #ident::parser().boxed(),
                 };
                 let relevant = if self.ast_relevant.contains(variant.attribute.name()) {
@@ -108,6 +109,12 @@ impl Language {
                     quote! {}
                 };
 
+                if matches!(variant.attribute, SyntaxAttribute::Error(_)) {
+                    parser = quote! {
+                        #lang_ident::#ident => panic!("error token doesnt have a parser"),
+                    }
+                }
+
                 (static_text, parser, relevant)
             })
             .collect();
@@ -116,6 +123,10 @@ impl Language {
         let root_ident = self.element_pool[self.root.expect("root existence already validated")]
             .attribute
             .name();
+        let error_ident = self
+            .error_token
+            .as_ref()
+            .expect("error token existence already validated");
         quote! {
             impl ::inktree::cstree::Syntax for #ident {
                 fn from_raw(raw: inktree::cstree::RawSyntaxKind) -> Self {
@@ -133,6 +144,7 @@ impl Language {
 
             impl ::inktree::Syntax for #ident {
                 type Root = #root_ident;
+                const ERROR: Self = #ident::#error_ident;
                 fn from_raw(raw: ::inktree::cstree::RawSyntaxKind) -> Self {
                     assert!(raw.0 < #variant_count, "Invalid raw syntax kind: {}", raw.0);
                     // Safety: discriminant is valid by the assert above
@@ -203,6 +215,13 @@ impl Language {
         if self.root.is_none() {
             Err(syn::Error::new_spanned(&self.ident, "no root todo text")).map_err(Error::from)?;
         }
+        if self.error_token.is_none() {
+            Err(syn::Error::new_spanned(
+                &self.ident,
+                "no error token todo better text",
+            ))
+            .map_err(Error::from)?;
+        }
 
         let mut stream = quote! {
             use inktree::Parseable;
@@ -214,7 +233,6 @@ impl Language {
                 #sink
             });
         }
-
 
         let variants_code = self
             .element_pool
@@ -229,7 +247,6 @@ impl Language {
         stream.extend(self.ast_codegen());
 
         stream.extend(self.syntax_impl());
-
 
         Ok(stream)
     }
@@ -280,6 +297,7 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
         ident: input.ident.clone(),
         operators: vec![],
         root: None,
+        error_token: None,
         cycle_graph: RuleGraph::new(),
         recursion_info: None,
         idents: HashMap::new(),
@@ -339,6 +357,15 @@ pub fn build(input: DeriveInput) -> Result<TokenStream, Errors<Error>> {
         .collect();
 
     language.recursion_info = Some(language.cycle_graph.into_recursive_info(&rules));
+
+    language.error_token = language
+        .element_pool
+        .iter()
+        .find_map(|a| match &a.attribute {
+            SyntaxAttribute::Error(error) => Some(error.name()),
+            _ => None,
+        })
+        .cloned();
 
     language.codegen()
 }

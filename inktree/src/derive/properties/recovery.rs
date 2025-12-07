@@ -1,10 +1,9 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use snafu::ResultExt;
-use syn::{Expr, ExprCall, Ident, MetaList, ExprPath,};
+use syn::{Expr, ExprCall, ExprPath, Ident, MetaList};
 
 use crate::{derive::parser::FromMeta, language::ElementError};
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Recover {
@@ -58,7 +57,6 @@ impl Recover {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RecoverKind {
     /// `recover(skip_to(Semicolon))` or `recover(skip_to(Semicolon, RBrace))`
@@ -74,7 +72,6 @@ pub enum RecoverKind {
     Balanced { open: Ident, close: Ident },
 }
 
-
 impl FromMeta for Recover {
     fn from_path(path: &syn::Path, _name: Option<&Ident>) -> Result<Self, ElementError> {
         // If you want to *forbid* bare `recover`:
@@ -87,12 +84,6 @@ impl FromMeta for Recover {
 
     fn from_list(list: &MetaList, _name: Option<&Ident>) -> Result<Self, ElementError> {
         use syn::spanned::Spanned;
-
-        // Everything inside `recover(...)` is parsed as a single Expr:
-        //
-        //   recover(skip_to(Semicolon, RBrace))
-        //          ^^^^^^^^^^^^^^^^^^^^^^^^^^ this Expr
-        //
         let expr: Expr = list.parse_args()?;
 
         let Expr::Call(ExprCall { func, args, .. }) = expr else {
@@ -130,15 +121,12 @@ impl FromMeta for Recover {
         for arg in args {
             match arg {
                 Expr::Path(ExprPath { path, .. }) => {
-                    let ident = path
-                        .get_ident()
-                        .cloned()
-                        .ok_or_else(|| {
-                            syn::Error::new_spanned(
-                                path,
-                                "expected a token name identifier (e.g. `Semicolon`)",
-                            )
-                        })?;
+                    let ident = path.get_ident().cloned().ok_or_else(|| {
+                        syn::Error::new_spanned(
+                            path,
+                            "expected a token name identifier (e.g. `Semicolon`)",
+                        )
+                    })?;
                     idents.push(ident);
                 }
                 other => {
@@ -175,7 +163,9 @@ impl FromMeta for Recover {
                     .context(crate::language::MetaSnafu)?;
                 }
 
-                RecoverKind::SkipPast { term: idents.into_iter().next().unwrap() }
+                RecoverKind::SkipPast {
+                    term: idents.into_iter().next().unwrap(),
+                }
             }
 
             // list(Comma, ParenClose)

@@ -191,6 +191,3 @@ pub trait LanguageElement: Sized {
 
     fn ast_shape(&self, language: &Language) -> Option<Shape>;
 }
-
-
-

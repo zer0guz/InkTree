@@ -185,7 +185,7 @@ where
 #[inline]
 pub fn significant_children_with_token<Sy: Syntax>(
     parent: &SyntaxNode<Sy>,
-) -> impl Iterator<Item = NodeOrToken<&SyntaxNode<Sy>,& SyntaxToken<Sy>>> {
+) -> impl Iterator<Item = NodeOrToken<&SyntaxNode<Sy>, &SyntaxToken<Sy>>> {
     parent
         .children_with_tokens()
         .filter(|el| el.kind().is_ast_relevant())
@@ -194,9 +194,7 @@ pub fn significant_children_with_token<Sy: Syntax>(
 pub fn significant_children<Sy: Syntax>(
     parent: &SyntaxNode<Sy>,
 ) -> impl Iterator<Item = &SyntaxNode<Sy>> {
-    parent
-        .children()
-        .filter(|el| el.kind().is_ast_relevant())
+    parent.children().filter(|el| el.kind().is_ast_relevant())
 }
 
 #[inline]

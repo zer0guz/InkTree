@@ -1,5 +1,6 @@
 mod allowed;
 mod attributes;
+mod error;
 mod node;
 mod pratt;
 mod rule;
@@ -10,6 +11,7 @@ pub use attributes::*;
 pub(crate) use node::*;
 pub(crate) use pratt::*;
 
+pub(crate) use error::*;
 pub(crate) use rule::*;
 pub(crate) use static_token::*;
 pub(crate) use token::*;

@@ -1,19 +1,9 @@
-// enum RecoverDsl {
-//     SkipPast { term: Ident },
-//     SkipTo { stops: Vec<Ident> },
-//     List { sep: Ident, end: Ident },
-//     Balanced { open: Ident, close: Ident },
-//     // ...
-// }
+use chumsky::{Parser, prelude::any};
 
-use chumsky::{
-    error::EmptyErr,
-    prelude::any,
-    primitive::Any,
-    recovery::{Strategy, ViaParser},
+use crate::{
+    Parseable, Syntax,
+    chumsky_ext::{BuilderParser, recover},
 };
-
-use crate::{Parseable, Syntax, chumsky_ext::BuilderParser};
 
 pub struct Strict;
 pub struct Recovering;
@@ -21,10 +11,10 @@ pub struct Recovering;
 pub trait RecoverySpec<N: Parseable> {
     fn attach<'src, 'cache, 'interner, 'borrow, 'extra, Err, P>(
         parser: P,
-    ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone+ 'extra
+    ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone + 'extra
     where
-        Err: chumsky::error::Error<'src, &'src str>  + 'extra,
-        P: BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone+ 'extra,
+        Err: chumsky::error::Error<'src, &'src str> + 'extra,
+        P: BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone + 'extra,
         'interner: 'cache,
         'borrow: 'interner,
         'src: 'extra,
@@ -38,12 +28,12 @@ impl<N: Parseable> RecoverySpec<N> for NoRecovery {
         parser: P,
     ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone + 'extra
     where
-        Err: chumsky::error::Error<'src, &'src str>+  'extra,
+        Err: chumsky::error::Error<'src, &'src str>,
         P: BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone + 'extra,
         'interner: 'cache,
         'borrow: 'interner,
         'src: 'extra,
-        'cache: 'extra
+        'cache: 'extra,
     {
         parser
     }
@@ -66,31 +56,21 @@ where
         'interner: 'cache,
         'borrow: 'interner,
         'src: 'extra,
-        'cache: 'extra
+        'cache: 'extra,
     {
-        use chumsky::Parser;
-        use chumsky::recovery;
+        let rec = any().repeated().at_least(1).to_slice();
 
-        let skip = any().ignored();
-
-        let term = TermTok::parser::<'src, 'cache, 'interner, 'borrow,'_, Err>().ignored();
-
-        let strat = recovery::skip_until(skip, term, || {
-            //TODO
-            ()
-        });
-
-        parser.recover_with(strat)
+        recover(parser, rec)
     }
 }
 
 pub trait ParseMode<N: Parseable> {
-    fn apply<'src, 'cache, 'interner, 'borrow,'extra, Err, P>(
+    fn apply<'src, 'cache, 'interner, 'borrow, 'extra, Err, P>(
         parser: P,
     ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone + 'extra
     where
         Err: chumsky::error::Error<'src, &'src str> + 'extra,
-        P: BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone  + 'extra,
+        P: BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone + 'extra,
         'interner: 'cache,
         'borrow: 'interner,
         'src: 'extra,
@@ -98,26 +78,26 @@ pub trait ParseMode<N: Parseable> {
 }
 
 impl<N: Parseable> ParseMode<N> for Strict {
-    fn apply<'src, 'cache, 'interner, 'borrow,'extra, Err, P>(
+    fn apply<'src, 'cache, 'interner, 'borrow, 'extra, Err, P>(
         parser: P,
     ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone + 'extra
     where
         Err: chumsky::error::Error<'src, &'src str> + 'extra,
-        P: BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone  + 'extra,
+        P: BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone + 'extra,
         'interner: 'cache,
-        'borrow: 'interner
+        'borrow: 'interner,
     {
         parser
     }
 }
 
 impl<N: Parseable> ParseMode<N> for Recovering {
-    fn apply<'src, 'cache, 'interner, 'borrow,'extra, Err, P>(
+    fn apply<'src, 'cache, 'interner, 'borrow, 'extra, Err, P>(
         parser: P,
     ) -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone + 'extra
     where
         Err: chumsky::error::Error<'src, &'src str> + 'extra,
-        P: BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone  + 'extra,
+        P: BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, N::Syntax> + Clone + 'extra,
         'interner: 'cache,
         'borrow: 'interner,
         'src: 'extra,
