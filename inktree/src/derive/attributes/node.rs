@@ -1,7 +1,6 @@
 use chumsky::Parser;
 use derive_more::From;
 use proc_macro2::TokenStream;
-use quote::quote;
 use syn::{Ident, MetaList};
 
 use crate::{
@@ -45,15 +44,7 @@ impl FromMeta for Node {
 
 impl LanguageElement for Node {
     fn codegen(&self, language: &Language) -> Result<TokenStream, ElementError> {
-        let lang_name = &language.ident;
-        let name = self.name();
-        let base_body = self.0.parser_body(language);
-        let node = quote! {
-            #base_body.as_node(#lang_name::#name)
-        };
-        let code = self.0.parser(node, language, true);
-
-        Ok(code)
+        Ok(self.0.parser(self.0.parser_body(language), language, true))
     }
 
     fn allowed(&self) -> &'static [PropertyKind] {

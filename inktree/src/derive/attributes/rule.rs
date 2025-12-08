@@ -152,9 +152,8 @@ impl Rule {
                     pub struct #name_ident;
                     impl #name_ident {
                         inktree::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
-                        //inktree::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
                     }
-                    inktree::parseable!(#lang_ident::#name_ident,  [#(#param_idents),*],{#wrapper},#recovery);
+                    inktree::parseable!(#lang_ident::#name_ident,  [#(#param_idents),*],{#wrapper},#recovery,Node);
                 }
             } else {
                 quote! {
@@ -162,8 +161,7 @@ impl Rule {
                     pub struct #name_ident;
                     impl #name_ident {
                         inktree::make_anchored_parser!(#lang_ident, [#(#used_anchors),*], [#(#param_idents),*], { #body });
-                        inktree::make_parser!(#lang_ident,[#(#param_idents),*], { #wrapper });
-                        //inktree::make_recursive_parser!(#lang_ident, #name_ident, [#(#peer_anchors),*]);
+                        inktree::make_parser!(parser,#lang_ident,[#(#param_idents),*], { #wrapper });
                     }
                 }
             }
@@ -172,14 +170,14 @@ impl Rule {
                 quote! {
                     #[derive(Debug)]
                     pub struct #name_ident;
-                    inktree::parseable!(#lang_ident::#name_ident, [#(#param_idents),*],{#body},#recovery);
+                    inktree::parseable!(#lang_ident::#name_ident, [#(#param_idents),*],{#body},#recovery,Node);
                 }
             } else {
                 quote! {
                     #[derive(Debug)]
                     pub struct #name_ident;
                     impl #name_ident {
-                        inktree::make_parser!(#lang_ident,[#(#param_idents),*],{#body});
+                        inktree::make_parser!(parser,#lang_ident,[#(#param_idents),*],{#body});
 
                     }
                 }

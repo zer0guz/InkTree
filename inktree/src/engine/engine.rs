@@ -1,14 +1,12 @@
+
 use std::fmt::Debug;
 
 use chumsky::Parser;
 use cstree::{build::NodeCache, green::GreenNode, interning::MultiThreadedTokenInterner};
 
-use crate::{
-    chumsky_ext::GreenState,
-    engine::{
-        Builder, Parseable, Syntax,
-        recovery::{Recovering, Strict},
-    },
+use crate::engine::{
+    Builder, Parseable, Syntax,
+    recovery::{Recovering, Strict},
 };
 pub trait ParserEngine {
     type Syntax: Syntax;
@@ -33,19 +31,18 @@ pub trait ParserEngine {
                     let (green, _cache_back) = builder.finish();
                     Ok(green)
                 }
-                Err(e) => Err(()),
+                Err(_e) => Err(()),
             }
         };
 
         if let Ok(green) = strict_result {
             return Ok(green);
         }
-
         let mut builder = Builder::with_cache(cache);
+        eprintln!("first parse failed trying recovery\n");
         let parser = <Self::Syntax as Syntax>::Root::go::<Err, Recovering>();
 
         let _ = parser.parse_with_state(input, &mut builder).into_result();
-
         // TODO nodes of recovery... builder.finish_node();
         // TODO: collect / attach errors
 

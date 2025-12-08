@@ -1,8 +1,8 @@
 #[macro_export]
 macro_rules! make_parser {
     // with params: list of idents
-    ($lang:ident, [$($arg:ident),*], $body:block) => {
-        fn parser<'src, 'cache, 'interner,'borrow,'extra, Err>(
+    ($name:ident, $lang:ident, [$($arg:ident),*], $body:block) => {
+        fn $name<'src, 'cache, 'interner,'borrow,'extra, Err>(
             $(
                 $arg: impl $crate::chumsky_ext::BuilderParser<
                     'src, 'cache, 'interner,'borrow, (), Err, $lang
@@ -63,11 +63,24 @@ macro_rules! make_anchored_parser {
 
 #[macro_export]
 macro_rules! parseable {
-    ($lang_name:ident::$name:ident, [$($param:ident),*], $body:block, $recovery:path) => {
+    ($lang_name:ident::$name:ident, [$($param:ident),*], $body:block, $recovery:path, Node) => {
         impl ::inktree::Parseable for $name {
             type Syntax = $lang_name;
-            inktree::make_parser!($lang_name, [$($param),*], $body);
+            inktree::make_parser!(base_parser,$lang_name, [$($param),*], $body);
+            inktree::make_parser!(wrap,$lang_name, [p], {
+                p.as_node($lang_name::$name)
+            });
             type RecoverySpec = $recovery;
+        }
+    };
+    ($lang_name:ident::$name:ident, [$($param:ident),*], $body:block) => {
+        impl ::inktree::Parseable for $name {
+            type Syntax = $lang_name;
+            inktree::make_parser!(base_parser,$lang_name, [$($param),*], $body);
+            inktree::make_parser!(wrap,$lang_name, [p], {
+                p
+            });
+            type RecoverySpec = ::inktree::engine::recovery::NoRecovery;
         }
     };
 }
@@ -78,34 +91,24 @@ macro_rules! token {
     ($lang_name:ident :: $name:ident, $body:block) => {
         #[derive(Debug)]
         pub(crate) struct $name;
-        $crate::parseable!(
-            $lang_name::$name,
-            [],
-            {
-                use $crate::chumsky::Parser;
-                use $crate::chumsky::prelude::*;
-                use $crate::chumsky_ext::*;
-                $body.as_token($lang_name::$name)
-            },
-            ::inktree::engine::recovery::NoRecovery
-        );
+        $crate::parseable!($lang_name::$name, [], {
+            use $crate::chumsky::Parser;
+            use $crate::chumsky::prelude::*;
+            use $crate::chumsky_ext::*;
+            $body.as_token($lang_name::$name)
+        });
     };
 
     // with sink
     ($lang_name:ident :: $name:ident, $body:block, has_extras) => {
         #[derive(Debug)]
         pub(crate) struct $name;
-        $crate::parseable!(
-            $lang_name::$name,
-            [],
-            {
-                use $crate::chumsky::Parser;
-                use $crate::chumsky::prelude::*;
-                use $crate::chumsky_ext::*;
-                $lang_name::sink($body.as_token($lang_name::$name))
-            },
-            ::inktree::engine::recovery::NoRecovery
-        );
+        $crate::parseable!($lang_name::$name, [], {
+            use $crate::chumsky::Parser;
+            use $crate::chumsky::prelude::*;
+            use $crate::chumsky_ext::*;
+            $lang_name::sink($body.as_token($lang_name::$name))
+        });
     };
 }
 
@@ -126,16 +129,11 @@ macro_rules! static_token {
     ($lang_name:ident :: $name:ident, $text:literal, has_extras) => {
         #[derive(Debug)]
         pub struct $name;
-        $crate::parseable!(
-            $lang_name::$name,
-            [],
-            {
-                use $crate::chumsky::prelude::*;
-                use $crate::chumsky_ext::*;
-                $lang_name::sink(just($text).as_static_token($lang_name::$name))
-            },
-            ::inktree::engine::recovery::NoRecovery
-        );
+        $crate::parseable!($lang_name::$name, [], {
+            use $crate::chumsky::prelude::*;
+            use $crate::chumsky_ext::*;
+            $lang_name::sink(just($text).as_static_token($lang_name::$name))
+        });
     };
 }
 

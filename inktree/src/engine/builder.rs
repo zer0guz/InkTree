@@ -56,38 +56,45 @@ where
         self.builder.revert_to(*marker.inspector());
     }
 }
-
 impl<'cache, 'interner, 'borrow, Sy> GreenState<Sy> for Builder<'cache, 'interner, 'borrow, Sy>
 where
-    Sy: Syntax,
+    Sy: Syntax + std::fmt::Debug,
 {
     type Checkpoint = cstree::build::Checkpoint;
 
     fn start_node_at(&mut self, checkpoint: Self::Checkpoint, kind: Sy) {
+        eprintln!("start_node_at: {:?} (cp = {:?})", kind, checkpoint,);
         self.builder.start_node_at(checkpoint, kind);
     }
 
     fn finish_node(&mut self) {
+        eprintln!("finish_node");
         self.builder.finish_node();
     }
 
     fn revert_to(&mut self, checkpoint: Self::Checkpoint) {
+        eprintln!("revert_to: {:?}", checkpoint,);
         self.builder.revert_to(checkpoint);
     }
 
     fn checkpoint(&self) -> Self::Checkpoint {
-        self.builder.checkpoint()
-    }
-
-    fn start_node(&mut self, kind: Sy) {
-        self.builder.start_node(kind);
+        let cp = self.builder.checkpoint();
+        eprintln!("checkpoint -> {:?}", cp,);
+        cp
     }
 
     fn token(&mut self, kind: Sy, slice: &str) {
+        eprintln!("token: kind={:?} text={:?}", kind, slice,);
         self.builder.token(kind, slice);
     }
 
     fn static_token(&mut self, kind: Sy) {
+        eprintln!("static_token: kind={:?}", kind,);
         self.builder.static_token(kind);
+    }
+
+    fn start_node(&mut self, kind: Sy) {
+        eprintln!("start node: kind={:?}", kind,);
+        self.builder.start_node(kind);
     }
 }
