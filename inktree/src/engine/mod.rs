@@ -1,6 +1,7 @@
 mod builder;
 mod engine;
 mod errors;
+pub mod incremental;
 mod parseable;
 pub mod recovery;
 mod syntax;
