@@ -1,9 +1,49 @@
 use std::marker::PhantomData;
 
-use chumsky::{extra::ParserExtra, Parser};
+use chumsky::error::Error;
+use chumsky::{Parser, extra::ParserExtra};
 
-use crate::{Language, Parseable};
-use crate::language::kind::{KindMarker, TokenSpec};
+use crate::chumsky_ext::{BuilderParser, GreenExtra};
+use crate::language::kind::{KindMarker};
+use crate::{KindBehaviorByTag, KindBuilderByTag, KindSpec, Language, Parseable, TokenSpec};
+
+/// Tag used to specialize behaviour for node kinds.
+pub struct TagNode;
+
+
+impl<const IDX: u16, const N: usize, L> KindSpec<IDX, N, TagNode> for KindMarker<IDX, N, L>
+where
+    L: Language<N>,
+    KindMarker<IDX, N, L>: NodeKindSpec<IDX, N>,
+{
+    type Lang = L;
+    type Tag = TagNode;
+}
+
+/// Specification for a node kind at a given index.
+///
+/// The node's structure is described by an HList of children.
+pub trait NodeKindSpec<const IDX: u16, const N: usize>: KindSpec<IDX, N, TagNode> {
+    /// Type-level list of children for this node.
+    type Children: ChildList<N, Self::Lang> + BuildableChildren<N, Self::Lang>;
+}
+
+
+/// Behaviour for struct-like node kinds, built from their type-level child list.
+impl<const IDX: u16, const N: usize, L>
+    KindBehaviorByTag<<KindMarker<IDX, N, L> as KindSpec<IDX, N, TagNode>>::Lang, IDX, N, TagNode>
+    for KindMarker<IDX, N, L>
+where
+    L: Language<N>,
+    KindMarker<IDX, N, L>: NodeKindSpec<IDX, N>,
+{
+    fn base_parser<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
+    where
+        Extra: ParserExtra<'src, &'src str>,
+    {
+        <KindMarker<IDX, N, L> as NodeKindSpec<IDX, N>>::Children::build_seq::<'src, Extra>()
+    }
+}
 
 /// Marker type for a token child in a struct node definition.
 pub struct RoleToken;
@@ -266,5 +306,77 @@ where
         let head = base.repeated().at_least(1).ignored();
         let tail = <() as BuildStructSeq<N, L, Tail>>::build::<'src, Extra>();
         head.then(tail).ignored()
+    }
+}
+
+/// Builds a `chumsky` parser for a struct-like node described by a type-level
+/// child list.
+///
+/// The `List` type is an HList composed of [`Cons`] and [`Nil`] with
+/// [`Child<IDX, Card, Role>`] elements. Each child entry expands to the
+/// appropriate `chumsky` parser based on its role and cardinality.
+///
+/// This example uses a stand-in language `MiniLang` with two token kinds `A`
+/// and `B`, and a struct node that parses `A B`.
+///
+/// ```
+/// use inktree::language::{struct_parser, Cons, Nil, Child, CardOne, RoleToken};
+///
+/// // Minimal example language enum:
+/// #[repr(u16)]
+/// #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+/// enum MiniLang {
+///     A,
+///     B,
+/// }
+///
+/// const N: usize = 2;
+///
+/// // Type-level child list: "A" then "B"
+/// type Children = Cons<
+///     Child<{ MiniLang::A as u16 }, CardOne, RoleToken>,
+///     Cons<Child<{ MiniLang::B as u16 }, CardOne, RoleToken>, Nil<N, MiniLang>>,
+/// >;
+///
+/// // Build a parser for that sequence. In real code you would plug in a real
+/// // `Language<N>` and `Syntax` impl for `MiniLang`.
+/// let _parser = struct_parser::<N, Children, MiniLang, chumsky::extra::Err<_, _>>();
+/// ```
+
+pub fn struct_parser<const N: usize, List, L, Extra>()
+-> impl Parser<'static, &'static str, (), Extra> + Clone
+where
+    L: Language<N>,
+    List: ChildList<N, L>,
+    (): BuildStructSeq<N, L, List>,
+    Extra: ParserExtra<'static, &'static str>,
+{
+    <() as BuildStructSeq<N, L, List>>::build::<'static, Extra>()
+}
+
+
+impl<const IDX: u16, const N: usize, L> KindBuilderByTag<L, IDX, N, TagNode>
+    for KindMarker<IDX, N, L>
+where
+    L: Language<N>,
+    KindMarker<IDX, N, L>: NodeKindSpec<IDX, N>,
+{
+    fn builder_parser<'src, 'cache, 'interner, 'borrow, 'extra, Err>()
+        -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, L> + Clone + 'extra
+    where
+        Err: Error<'src, &'src str> + 'extra,
+        'interner: 'cache,
+        'borrow: 'interner,
+        'cache: 'extra,
+        'src: 'extra,
+    {
+
+        // Children HList → grammar parser, with GreenExtra
+        let seq = <KindMarker<IDX, N, L> as NodeKindSpec<IDX, N>>
+            ::Children::build_seq::<'src, GreenExtra<'cache, 'interner, 'borrow, Err, L>>();
+
+        let kind = L::KINDS[IDX as usize];
+
+        seq.as_node(kind)
     }
 }

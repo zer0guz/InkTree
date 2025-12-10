@@ -11,5 +11,3 @@ pub trait Syntax: cstree::Syntax + Copy + Eq + 'static {
         <Self as cstree::Syntax>::into_raw(self)
     }
 }
-
-

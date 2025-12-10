@@ -3,7 +3,11 @@ use std::fmt::Debug;
 use chumsky::Parser;
 use cstree::{build::NodeCache, green::GreenNode, interning::MultiThreadedTokenInterner};
 
-use crate::{Syntax, chumsky_ext::Builder,Parseable, engine::recovery::{Recovering, Strict}};
+use crate::{
+    Parseable, Syntax,
+    chumsky_ext::Builder,
+    engine::recovery::{Recovering, Strict},
+};
 pub trait ParserEngine {
     type Syntax: Syntax;
 

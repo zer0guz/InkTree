@@ -1,17 +1,20 @@
-mod parseable;
-mod syntax;
 mod kind;
 mod node;
+mod parseable;
+mod syntax;
+mod token;
 
-pub use parseable::*;
-pub use syntax::*;
 pub use kind::*;
+pub use node::*;
+pub use parseable::Parseable;
+pub use syntax::Syntax;
+pub use token::*;
 
 // --------------------- Language ---------------------
 
-pub trait Language<const COUNT:usize>: Syntax + 'static {    
-    /// Total number of kinds. Used to size const tables.
-    const KINDS: [Self;COUNT];
+pub trait Language<const COUNT: usize>: Syntax + 'static {
+    /// Enum variants indexed by discriminant
+    const KINDS: [Self; COUNT];
 
     /// Root node kind.
     const ROOT: Self;
@@ -21,9 +24,6 @@ pub trait Language<const COUNT:usize>: Syntax + 'static {
 
     /// Kinds treated as extras (whitespace, comments, …).
     const EXTRAS: &'static [Self];
-
-    // Per-kind metadata. Length MUST be KIND_COUNT.
-    //const KINDS: &'static [KindInfo<Self>];
 }
 
 #[cfg(test)]
@@ -31,7 +31,10 @@ mod tests {
     use super::*;
     use chumsky::{Parser, error::EmptyErr, extra::Full};
 
-    use crate::language::{node::{BuildStructSeq, CardMany, CardOne, CardOneOrMore, CardZeroOrOne, Child, ChildList, Cons, Nil, RoleToken}, syntax::Syntax}; // or `use crate::Syntax;` if you re-export it
+    use crate::language::{
+        node::{CardMany, CardOne, CardOneOrMore, CardZeroOrOne, Child, Cons, Nil, RoleToken},
+        syntax::Syntax, token::TokenSpec,
+    }; // or `use crate::Syntax;` if you re-export it
 
     #[repr(u16)]
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -41,7 +44,6 @@ mod tests {
         B,
     }
 
-    // cstree integration, unchanged in spirit
     impl cstree::Syntax for MiniLang {
         fn from_raw(raw: cstree::RawSyntaxKind) -> Self {
             unsafe { core::mem::transmute::<u16, MiniLang>(raw.0 as u16) }
@@ -56,7 +58,6 @@ mod tests {
         }
     }
 
-    // Our own Syntax: used by the static-token Parseable impl.
     impl Syntax for MiniLang {
         fn static_text(self) -> Option<&'static str> {
             match self {
@@ -117,24 +118,14 @@ mod tests {
         Cons<Child<{ MiniLang::B as u16 }, CardOne, RoleToken>, Nil<N, L>>,
     >;
 
-    // Generic “struct node” parser for a given child list.
-    fn struct_parser<List>() -> impl Parser<'static, &'static str, (), Full<EmptyErr,(),()>> + Clone
-    where
-        L: Language<N>,
-        List: ChildList<N, L>,
-        (): BuildStructSeq<N, L, List>,
-    {
-        <() as BuildStructSeq<N, L, List>>::build::<'static, Full<EmptyErr,(),()>>()
-    }
-
     #[test]
     fn can_build_struct_parser_type() {
-        let _parser = struct_parser::<RootChildren>();
+        let _parser = struct_parser::<_, RootChildren, _, Full<EmptyErr, (), ()>>();
     }
 
     #[test]
     fn root_node_consumes_two_chars() {
-        let parser = struct_parser::<RootChildren>();
+        let parser = struct_parser::<_, RootChildren, _, Full<EmptyErr, (), ()>>();
 
         let ok = parser.clone().parse("ab").into_result();
         assert!(ok.is_ok(), "expected \"ab\" to parse, got: {:?}", ok);
@@ -145,7 +136,7 @@ mod tests {
 
     #[test]
     fn card_zero_or_one_behaves_like_optional() {
-        let parser = struct_parser::<OptABChildren>();
+        let parser = struct_parser::<_, OptABChildren, _, Full<EmptyErr, (), ()>>();
 
         assert!(
             parser.clone().parse("b").into_result().is_ok(),
@@ -172,7 +163,7 @@ mod tests {
 
     #[test]
     fn card_many_allows_zero_or_more_before_b() {
-        let parser = struct_parser::<ManyABChildren>();
+        let parser = struct_parser::<_, ManyABChildren, _, Full<EmptyErr, (), ()>>();
 
         assert!(
             parser.clone().parse("b").into_result().is_ok(),
@@ -199,7 +190,7 @@ mod tests {
 
     #[test]
     fn card_one_or_more_requires_at_least_one_before_b() {
-        let parser = struct_parser::<PlusABChildren>();
+        let parser = struct_parser::<_, PlusABChildren, _, Full<EmptyErr, (), ()>>();
 
         assert!(
             parser.clone().parse("ab").into_result().is_ok(),

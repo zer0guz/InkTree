@@ -10,7 +10,11 @@ use chumsky::{
 };
 
 use crate::{
-    Syntax, chumsky_ext::{Builder, extra::{GreenExtra, GreenState}}
+    Syntax,
+    chumsky_ext::{
+        Builder,
+        extra::{GreenExtra, GreenState},
+    },
 };
 
 type Input<'src> = &'src str;
