@@ -1,3 +1,3 @@
 mod document;
 
-pub use document::DocumentSession;
+//pub use document::DocumentSession;

@@ -1,6 +1,7 @@
 use chumsky::extra::Full;
 
-use crate::engine::Builder;
+use crate::chumsky_ext::builder::Builder;
+
 
 pub type GreenExtra<'cache, 'interner, 'borrow, Err, Sy> =
     Full<Err, Builder<'cache, 'interner, 'borrow, Sy>, ()>;
