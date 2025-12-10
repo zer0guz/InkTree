@@ -4,14 +4,21 @@ use chumsky::Parser;
 use cstree::{build::NodeCache, green::GreenNode, interning::MultiThreadedTokenInterner};
 
 use crate::{
-    Parseable, Syntax,
+    KindMarker, Language, Parseable, Syntax,
     chumsky_ext::Builder,
     engine::recovery::{Recovering, Strict},
 };
 pub trait ParserEngine {
-    type Syntax: Syntax;
-
-    fn parse_with_cache<'src, 'interner, 'borrow, 'cache, Err>(
+    fn parse_with_cache<
+        'src,
+        'interner,
+        'borrow,
+        'cache,
+        const N: usize,
+        const ROOT: u16,
+        Err,
+        L: Language,
+    >(
         cache: &'cache mut NodeCache<'interner, &'borrow MultiThreadedTokenInterner>,
         input: &'src str,
     ) -> Result<GreenNode, Err>
@@ -22,7 +29,7 @@ pub trait ParserEngine {
         // let strict_result: Result<GreenNode, ()> = {
         //     let mut builder = Builder::with_cache(cache);
 
-        //     let parser = <Self::Syntax as Syntax>::Root::go::<Err, Strict>();
+        //     let parser = KindMarker::<{ROOT},N,L>::parser();;
 
         //     let result = parser.parse_with_state(input, &mut builder).into_result();
 
@@ -48,11 +55,10 @@ pub trait ParserEngine {
 
         // let (green, _cache_back) = builder.finish();
         // Ok(green)
-
         todo!()
     }
 }
 
-impl<Sy: Syntax> ParserEngine for Sy {
-    type Syntax = Sy;
-}
+// impl<L: Language> ParserEngine for Sy {
+//     type Syntax = Sy;
+// }

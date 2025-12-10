@@ -1,3 +1,6 @@
+#![feature(min_generic_const_args)]
+#![expect(incomplete_features)]
+
 mod ast;
 pub mod chumsky_ext;
 pub mod engine;

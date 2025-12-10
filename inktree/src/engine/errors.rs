@@ -1,11 +1,11 @@
 #[derive(Debug, Clone)]
-pub struct InkError {
+pub struct _InkError {
     pub span: std::ops::Range<usize>, // byte offsets in the file
-    pub kind: InkErrorKind,
+    pub kind: _InkErrorKind,
 }
 
 #[derive(Debug, Clone)]
-pub enum InkErrorKind {
+pub enum _InkErrorKind {
     Expected(Vec<&'static str>),
     UnclosedDelimiter { open: char, close: char },
     // ...

@@ -1,47 +1,47 @@
 use std::marker::PhantomData;
 
 use chumsky::error::Error;
+use chumsky::prelude::empty;
 use chumsky::{Parser, extra::ParserExtra};
 
 use crate::chumsky_ext::{BuilderParser, GreenExtra};
-use crate::language::kind::{KindMarker};
+use crate::language::kind::KindMarker;
 use crate::{KindBehaviorByTag, KindBuilderByTag, KindSpec, Language, Parseable, TokenSpec};
 
 /// Tag used to specialize behaviour for node kinds.
 pub struct TagNode;
 
-
-impl<const IDX: u16, const N: usize, L> KindSpec<IDX, N, TagNode> for KindMarker<IDX, N, L>
+impl<const IDX: u32, L> KindSpec<TagNode> for KindMarker<IDX, L>
 where
-    L: Language<N>,
-    KindMarker<IDX, N, L>: NodeKindSpec<IDX, N>,
+    L: Language,
+    KindMarker<IDX, L>: NodeKindSpec<IDX>,
 {
     type Lang = L;
     type Tag = TagNode;
+
+    #[type_const]
+    const IDX: u32 = IDX;
 }
 
 /// Specification for a node kind at a given index.
 ///
 /// The node's structure is described by an HList of children.
-pub trait NodeKindSpec<const IDX: u16, const N: usize>: KindSpec<IDX, N, TagNode> {
+pub trait NodeKindSpec<const IDX: u32>: KindSpec<TagNode> {
     /// Type-level list of children for this node.
-    type Children: ChildList<N, Self::Lang> + BuildableChildren<N, Self::Lang>;
+    type Children: ChildList<Self::Lang> + BuildableChildren<Self::Lang>;
 }
 
-
 /// Behaviour for struct-like node kinds, built from their type-level child list.
-impl<const IDX: u16, const N: usize, L>
-    KindBehaviorByTag<<KindMarker<IDX, N, L> as KindSpec<IDX, N, TagNode>>::Lang, IDX, N, TagNode>
-    for KindMarker<IDX, N, L>
+impl<const IDX: u32, L> KindBehaviorByTag<TagNode, L> for KindMarker<IDX, L>
 where
-    L: Language<N>,
-    KindMarker<IDX, N, L>: NodeKindSpec<IDX, N>,
+    L: Language,
+    KindMarker<IDX, L>: NodeKindSpec<IDX>,
 {
     fn base_parser<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
         Extra: ParserExtra<'src, &'src str>,
     {
-        <KindMarker<IDX, N, L> as NodeKindSpec<IDX, N>>::Children::build_seq::<'src, Extra>()
+        <KindMarker<IDX, L> as NodeKindSpec<IDX>>::Children::build_seq::<'src, Extra>()
     }
 }
 
@@ -67,12 +67,12 @@ pub struct CardMany;
 pub struct CardOneOrMore;
 
 /// Pointer to a child kind with role and cardinality information.
-pub struct Child<const IDX: u16, Card, Role>(pub PhantomData<(Card, Role)>);
+pub struct Child<const IDX: u32, Card, Role>(pub PhantomData<(Card, Role)>);
 
 /// Specification of a single child slot in a struct node.
-pub trait ChildSpec<const N: usize, L: Language<N>> {
+pub trait ChildSpec<L: Language> {
     /// Index of the child kind in the language's `KINDS` table.
-    const IDX: u16;
+    const IDX: u32;
 
     /// Cardinality for this child.
     type Card;
@@ -81,30 +81,30 @@ pub trait ChildSpec<const N: usize, L: Language<N>> {
     type Role;
 }
 
-impl<const N: usize, L, const IDX: u16, Card, Role> ChildSpec<N, L> for Child<IDX, Card, Role>
+impl<const IDX: u32, Card, Role, L> ChildSpec<L> for Child<IDX, Card, Role>
 where
-    L: Language<N>,
+    L: Language,
 {
-    const IDX: u16 = IDX;
+    const IDX: u32 = IDX;
     type Card = Card;
     type Role = Role;
 }
 
 /// Type-level heterogeneous list of children for a struct node.
-pub trait ChildList<const N: usize, L: Language<N>> {}
+pub trait ChildList<L: Language> {}
 
 /// Empty child list.
-pub struct Nil<const N: usize, L: Language<N>>(pub PhantomData<L>);
+pub struct Nil<L: Language>(pub PhantomData<L>);
 
 /// Cons cell for building type-level child lists.
 pub struct Cons<Head, Tail>(pub PhantomData<(Head, Tail)>);
 
-impl<const N: usize, L: Language<N>> ChildList<N, L> for Nil<N, L> {}
+impl<L: Language> ChildList<L> for Nil<L> {}
 
-impl<const N: usize, L: Language<N>, Head, Tail> ChildList<N, L> for Cons<Head, Tail>
+impl<L: Language, Head, Tail> ChildList<L> for Cons<Head, Tail>
 where
-    Head: ChildSpec<N, L>,
-    Tail: ChildList<N, L>,
+    Head: ChildSpec<L>,
+    Tail: ChildList<L>,
 {
 }
 
@@ -112,7 +112,7 @@ where
 ///
 /// This is the high-level entry point for building struct-node parsers from
 /// their type-level shape.
-pub trait BuildableChildren<const N: usize, L: Language<N>>: ChildList<N, L> {
+pub trait BuildableChildren<L: Language>: ChildList<L> {
     /// Build a parser that consumes this child sequence.
     fn build_seq<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
@@ -120,15 +120,15 @@ pub trait BuildableChildren<const N: usize, L: Language<N>>: ChildList<N, L> {
 }
 
 /// `BuildableChildren` implementation for the empty child list.
-impl<const N: usize, L> BuildableChildren<N, L> for Nil<N, L>
+impl<L> BuildableChildren<L> for Nil<L>
 where
-    L: Language<N>,
+    L: Language,
 {
     fn build_seq<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
         Extra: ParserExtra<'src, &'src str>,
     {
-        <() as BuildStructSeq<N, L, Nil<N, L>>>::build::<'src, Extra>()
+        empty()
     }
 }
 
@@ -136,26 +136,25 @@ where
 ///
 /// Additional `BuildableChildren` impls can be added for other cardinalities
 /// if needed.
-impl<const IDX: u16, const N: usize, Role, Tail, L> BuildableChildren<N, L>
-    for Cons<Child<IDX, CardOne, Role>, Tail>
+impl<const IDX: u32, Role, Tail, L> BuildableChildren<L> for Cons<Child<IDX, CardOne, Role>, Tail>
 where
-    L: Language<N>,
-    Tail: ChildList<N, L> + BuildableChildren<N, L>,
-    (): BuildStructSeq<N, L, Cons<Child<IDX, CardOne, Role>, Tail>>,
+    L: Language,
+    Tail: ChildList<L> + BuildableChildren<L>,
+    Const: BuildStructSeq<Cons<Child<IDX, CardOne, Role>, Tail>, L>,
 {
     fn build_seq<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
         Extra: ParserExtra<'src, &'src str>,
     {
-        <() as BuildStructSeq<N, L, Self>>::build::<'src, Extra>()
+        Const::build::<'src, Extra>()
     }
 }
 
 /// Internal helper that folds a `ChildList` into a Chumsky sequence parser.
-pub trait BuildStructSeq<const N: usize, L, List>
+pub trait BuildStructSeq<List, L>
 where
-    L: Language<N>,
-    List: ChildList<N, L>,
+    L: Language,
+    List: ChildList<L>,
 {
     /// Build the parser for the given child list.
     fn build<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
@@ -164,9 +163,9 @@ where
 }
 
 /// `BuildStructSeq` implementation for an empty child list.
-impl<const N: usize, L> BuildStructSeq<N, L, Nil<N, L>> for ()
+impl<L> BuildStructSeq<Nil<L>, L> for Const
 where
-    L: Language<N>,
+    L: Language,
 {
     fn build<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
@@ -177,50 +176,52 @@ where
 }
 
 /// Role-specific parser for a single child at a given index.
-pub trait BaseChild<const IDX: u16, const N: usize, L: Language<N>, Role> {
+pub trait BaseChild<const IDX: u32, Role, L: Language> {
     /// Build the parser for this child.
     fn base<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
         Extra: ParserExtra<'src, &'src str>;
 }
 
+pub struct Const;
+
 /// Token child implementation for static tokens.
 ///
 /// This delegates to the `TokenSpec` and `Parseable` implementations for the
 /// corresponding kind marker.
-impl<const N: usize, L, const IDX: u16> BaseChild<IDX, N, L, RoleToken> for ()
+impl<L, const IDX: u32> BaseChild<IDX, RoleToken, L> for Const
 where
-    L: Language<N>,
-    KindMarker<IDX, N, L>: TokenSpec<IDX, N, true>,
+    L: Language,
+    KindMarker<IDX, L>: TokenSpec<true>,
 {
     fn base<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
         Extra: ParserExtra<'src, &'src str>,
     {
-        <KindMarker<IDX, N, L> as TokenSpec<IDX, N, true>>::Parser::parser::<Extra>().ignored()
+        <KindMarker<IDX, L> as TokenSpec<true>>::Parser::parser::<Extra>().ignored()
     }
 }
 
 /// Token child implementation for non-static tokens.
-impl<const IDX: u16, const N: usize, L> BaseChild<IDX, N, L, RoleToken> for ()
+impl<const IDX: u32, L> BaseChild<IDX, RoleToken, L> for Const
 where
-    L: Language<N>,
-    KindMarker<IDX, N, L>: TokenSpec<IDX, N, false>,
+    L: Language,
+    KindMarker<IDX, L>: TokenSpec<false>,
 {
     fn base<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
         Extra: ParserExtra<'src, &'src str>,
     {
-        <KindMarker<IDX, N, L> as TokenSpec<IDX, N, false>>::Parser::parser::<Extra>().ignored()
+        <KindMarker<IDX, L> as TokenSpec<false>>::Parser::parser::<Extra>().ignored()
     }
 }
 
 /// Node child implementation.
 ///
 /// This will later dispatch to the node parser; currently it is a placeholder.
-impl<const IDX: u16, const N: usize, L> BaseChild<IDX, N, L, RoleNode> for ()
+impl<const IDX: u32, L> BaseChild<IDX, RoleNode, L> for Const
 where
-    L: Language<N>,
+    L: Language,
 {
     fn base<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
@@ -231,80 +232,80 @@ where
 }
 
 /// `BuildStructSeq` implementation for a leading `CardOne` child.
-impl<const IDX: u16, const N: usize, L, Role, Tail>
-    BuildStructSeq<N, L, Cons<Child<IDX, CardOne, Role>, Tail>> for ()
+impl<const IDX: u32, Role, Tail, L> BuildStructSeq<Cons<Child<IDX, CardOne, Role>, Tail>, L>
+    for Const
 where
-    L: Language<N>,
-    Tail: ChildList<N, L>,
-    (): BuildStructSeq<N, L, Tail>,
-    (): BaseChild<IDX, N, L, Role>,
+    L: Language,
+    Tail: ChildList<L>,
+    Const: BuildStructSeq<Tail, L>,
+    Const: BaseChild<IDX, Role, L>,
 {
     fn build<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
         Extra: ParserExtra<'src, &'src str>,
     {
-        let head = <() as BaseChild<IDX, N, L, Role>>::base::<'src, Extra>();
-        let tail = <() as BuildStructSeq<N, L, Tail>>::build::<'src, Extra>();
+        let head = <Const as BaseChild<IDX, Role, L>>::base::<'src, Extra>();
+        let tail = <Const as BuildStructSeq<Tail, L>>::build::<'src, Extra>();
         head.then(tail).ignored()
     }
 }
 
 /// `BuildStructSeq` implementation for a leading `CardZeroOrOne` child.
-impl<const IDX: u16, const N: usize, L, Role, Tail>
-    BuildStructSeq<N, L, Cons<Child<IDX, CardZeroOrOne, Role>, Tail>> for ()
+impl<const IDX: u32, L, Role, Tail> BuildStructSeq<Cons<Child<IDX, CardZeroOrOne, Role>, Tail>, L>
+    for Const
 where
-    L: Language<N>,
-    Tail: ChildList<N, L>,
-    (): BuildStructSeq<N, L, Tail>,
-    (): BaseChild<IDX, N, L, Role>,
+    L: Language,
+    Tail: ChildList<L>,
+    Const: BuildStructSeq<Tail, L>,
+    Const: BaseChild<IDX, Role, L>,
 {
     fn build<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
         Extra: ParserExtra<'src, &'src str>,
     {
-        let base = <() as BaseChild<IDX, N, L, Role>>::base::<'src, Extra>();
+        let base = <Const as BaseChild<IDX, Role, L>>::base::<'src, Extra>();
         let head = base.or_not().ignored();
-        let tail = <() as BuildStructSeq<N, L, Tail>>::build::<'src, Extra>();
+        let tail = <Const as BuildStructSeq<Tail, L>>::build::<'src, Extra>();
         head.then(tail).ignored()
     }
 }
 
 /// `BuildStructSeq` implementation for a leading `CardMany` child.
-impl<const IDX: u16, const N: usize, L, Role, Tail>
-    BuildStructSeq<N, L, Cons<Child<IDX, CardMany, Role>, Tail>> for ()
+impl<const IDX: u32, Role, Tail, L> BuildStructSeq<Cons<Child<IDX, CardMany, Role>, Tail>, L>
+    for Const
 where
-    L: Language<N>,
-    Tail: ChildList<N, L>,
-    (): BuildStructSeq<N, L, Tail>,
-    (): BaseChild<IDX, N, L, Role>,
+    L: Language,
+    Tail: ChildList<L>,
+    Const: BuildStructSeq<Tail, L>,
+    Const: BaseChild<IDX, Role, L>,
 {
     fn build<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
         Extra: ParserExtra<'src, &'src str>,
     {
-        let base = <() as BaseChild<IDX, N, L, Role>>::base::<'src, Extra>();
+        let base = <Const as BaseChild<IDX, Role, L>>::base::<'src, Extra>();
         let head = base.repeated().ignored();
-        let tail = <() as BuildStructSeq<N, L, Tail>>::build::<'src, Extra>();
+        let tail = <Const as BuildStructSeq<Tail, L>>::build::<'src, Extra>();
         head.then(tail).ignored()
     }
 }
 
 /// `BuildStructSeq` implementation for a leading `CardOneOrMore` child.
-impl<const IDX: u16, const N: usize, L, Role, Tail>
-    BuildStructSeq<N, L, Cons<Child<IDX, CardOneOrMore, Role>, Tail>> for ()
+impl<const IDX: u32, Role, Tail, L> BuildStructSeq<Cons<Child<IDX, CardOneOrMore, Role>, Tail>, L>
+    for Const
 where
-    L: Language<N>,
-    Tail: ChildList<N, L>,
-    (): BuildStructSeq<N, L, Tail>,
-    (): BaseChild<IDX, N, L, Role>,
+    L: Language,
+    Tail: ChildList<L>,
+    Const: BuildStructSeq<Tail, L>,
+    Const: BaseChild<IDX, Role, L>,
 {
     fn build<'src, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
     where
         Extra: ParserExtra<'src, &'src str>,
     {
-        let base = <() as BaseChild<IDX, N, L, Role>>::base::<'src, Extra>();
+        let base = <Const as BaseChild<IDX, Role, L>>::base::<'src, Extra>();
         let head = base.repeated().at_least(1).ignored();
-        let tail = <() as BuildStructSeq<N, L, Tail>>::build::<'src, Extra>();
+        let tail = <Const as BuildStructSeq<Tail, L>>::build::<'src, Extra>();
         head.then(tail).ignored()
     }
 }
@@ -343,26 +344,23 @@ where
 /// let _parser = struct_parser::<N, Children, MiniLang, chumsky::extra::Err<_, _>>();
 /// ```
 
-pub fn struct_parser<const N: usize, List, L, Extra>()
--> impl Parser<'static, &'static str, (), Extra> + Clone
+pub fn struct_parser<'src, List, L, Extra>() -> impl Parser<'src, &'src str, (), Extra> + Clone
 where
-    L: Language<N>,
-    List: ChildList<N, L>,
-    (): BuildStructSeq<N, L, List>,
-    Extra: ParserExtra<'static, &'static str>,
+    L: Language,
+    List: ChildList<L>,
+    Const: BuildStructSeq<List, L>,
+    Extra: ParserExtra<'src, &'src str>,
 {
-    <() as BuildStructSeq<N, L, List>>::build::<'static, Extra>()
+    Const::build::<'src, Extra>()
 }
 
-
-impl<const IDX: u16, const N: usize, L> KindBuilderByTag<L, IDX, N, TagNode>
-    for KindMarker<IDX, N, L>
+impl<const IDX: u32, L> KindBuilderByTag<TagNode, L> for KindMarker<IDX, L>
 where
-    L: Language<N>,
-    KindMarker<IDX, N, L>: NodeKindSpec<IDX, N>,
+    L: Language,
+    KindMarker<IDX, L>: NodeKindSpec<IDX>,
 {
     fn builder_parser<'src, 'cache, 'interner, 'borrow, 'extra, Err>()
-        -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, L> + Clone + 'extra
+    -> impl BuilderParser<'src, 'cache, 'interner, 'borrow, (), Err, L> + Clone + 'extra
     where
         Err: Error<'src, &'src str> + 'extra,
         'interner: 'cache,
@@ -370,10 +368,11 @@ where
         'cache: 'extra,
         'src: 'extra,
     {
-
         // Children HList → grammar parser, with GreenExtra
-        let seq = <KindMarker<IDX, N, L> as NodeKindSpec<IDX, N>>
-            ::Children::build_seq::<'src, GreenExtra<'cache, 'interner, 'borrow, Err, L>>();
+        let seq = <KindMarker<IDX, L> as NodeKindSpec<IDX>>::Children::build_seq::<
+            'src,
+            GreenExtra<'cache, 'interner, 'borrow, Err, L>,
+        >();
 
         let kind = L::KINDS[IDX as usize];
 
